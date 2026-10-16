@@ -36,9 +36,9 @@ page shows what the patient says, request cards, fatigue notices, and a full-scr
 alert with vibration and sound on emergency. Only short text events go through the relay.
 
 ## Phone on any network
-1. `npm run phone`, then in a second terminal `npm run tunnel` (needs `tools\cloudflared.exe` from github.com/cloudflare/cloudflared/releases, windows-amd64; no account).
-2. Open the printed `https://*.trycloudflare.com` URL on the laptop, press **Caregiver QR**, scan it with the phone (any network; HTTPS also gives the camera permission).
-3. Needs outbound TCP/UDP 7844; if the venue blocks it, use a phone hotspot or the same Wi-Fi (LAN QR still works).
+1. `npm run phone`, then in a second terminal `npm run tunnel` (localhost.run over SSH port 22, no account; Windows OpenSSH). It prints `https://<random>.lhr.life`.
+2. Open that URL on the laptop, press **Caregiver QR**, scan it with the phone (any network; HTTPS also gives camera permission). The URL changes every run.
+3. Alternative: `npm run tunnel:cf` (Cloudflare, needs `tools\cloudflared.exe` and outbound port 7844, which some networks block).
 
 ## Credits
 All code was written during the event on 16 Oct 2026, with AI coding assistants
