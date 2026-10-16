@@ -25,6 +25,7 @@ export function startCaregiverLink({ ui }) {
   window.addEventListener('aac:spoken', (e) => send({ type: 'spoken', text: e.detail?.text, lang: e.detail?.lang }));
   window.addEventListener('aac:emergency', () => send({ type: 'emergency' }));
   window.addEventListener('aac:request', (e) => send({ type: 'request', kind: e.detail?.kind, label: e.detail?.label }));
+  window.addEventListener('gaze:rest', (e) => send({ type: 'rest', resting: !!e.detail?.resting }));
   window.addEventListener('gaze:fatigue', (e) => send({ type: 'fatigue', level: e.detail?.level }));
 
   // QR button: asks the relay for the laptop's LAN IP, then draws the phone URL

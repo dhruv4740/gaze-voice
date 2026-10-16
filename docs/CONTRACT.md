@@ -26,6 +26,14 @@ Dispatch on `window`; Team A forwards them over the WebSocket relay to `caregive
 - Team A also dispatches `new CustomEvent('gaze:fatigue', { detail: { level } })` (level
   `'mild' | 'high'`); Team B may react (for example a "Take a break?" tile).
 
+## Rest mode (Midas-touch fix, Team A)
+While resting, dwell and blink selection are off everywhere and the screen is dimmed with one big Wake target.
+- `gaze:rest` `{ resting: true|false }` is dispatched on `window` when rest starts/ends. Stop listening or speaking while `resting`.
+- Team B dispatches `new CustomEvent('aac:heard', { detail: { text } })` when a new question is heard: it wakes the app.
+- Team A enters rest ~1 s after speech ends (after `aac:spoken`), after 20 s without a selection or click, when the face is lost for 2 s, via the HUD Rest button or Shift+P. Wake: dwell 2 s on the Wake target, a double long blink, `aac:heard`, or selecting an always-on element. (`?rest=0` turns the automatic entries off, `?restafter=SECONDS` sets the idle time.)
+- Put `data-gaze-always="1"` on a `data-gaze-target` that must stay selectable in rest (the emergency tile). Selecting it also wakes the app.
+- Stats, fatigue and learning are frozen while resting.
+
 ## Entry points (called from `src/main.js`)
 - Team A: `startGaze({ mode, root })`, mode `'mouse' | 'eyes' | 'head'`.
 - Team B: `startConversation(appElement)`.

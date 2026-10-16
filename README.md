@@ -55,3 +55,7 @@ and the browser Web Speech API.
 
 - Camera modes (head, iris, eyes) have a sensitivity slider in the HUD (0.5–2.0, saved), also **Shift+]** / **Shift+[**. Lower = a bigger movement per screen distance. Head calibration now says to point with the nose and redoes a dot if the head barely moved.
 - `?mode=hand`: for users who can move a hand but not speak. The index fingertip is the pointer (central 60% of the camera frame maps to the whole screen); pinching thumb and index selects instantly. No calibration. Hand tracking uses MediaPipe HandLandmarker (Apache-2.0, `@mediapipe/tasks-vision`).
+
+### Rest mode
+
+Stops the "it always has to select something" problem. Resting dims the screen and disables dwell and blink selection except a big **Wake** target (top centre, dwell 2 s) and elements with `data-gaze-always` (emergency). Rest starts ~1 s after a reply is spoken, after 20 s without a selection, when the face is lost for 2 s, from the HUD **Rest** button or **Shift+P**. Wake with the target, a double long blink, a heard question (`aac:heard`) or the emergency tile. Contract details are in `docs/CONTRACT.md`; `?rest=0` disables the automatic entries.

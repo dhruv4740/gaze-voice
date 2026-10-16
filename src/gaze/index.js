@@ -6,6 +6,7 @@ import { createTargeter, createDwell } from './select.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
+import { createRest } from './rest.js';
 import { startCaregiverLink } from '../caregiver/patient.js';
 
 const DEFAULT_DWELL_MS = 1200;
@@ -37,6 +38,17 @@ export function startGaze({ mode = 'mouse', root }) {
 
   const stats = createStats({ root });
   const fatigue = createFatigue();
+  const restBtn = document.createElement('button');
+  restBtn.id = 'gaze-rest-btn';
+  const rest = createRest({
+    root,
+    idleMs: (Number(params.get('restafter')) || 20) * 1000,
+    auto: params.get('rest') !== '0',
+    onChange: (r) => { stats.setPaused(r); restBtn.textContent = r ? 'Wake' : 'Rest'; },
+  });
+  restBtn.textContent = 'Rest';
+  restBtn.onclick = () => rest.toggle();
+  ui.appendChild(restBtn);
   window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
   setInterval(() => stats.update(fatigue.stats()), 1000);
   const pageStart = performance.now();
@@ -65,6 +77,7 @@ export function startGaze({ mode = 'mouse', root }) {
       if (closed) blinkTarget = dwell.el;
     },
     onLongBlink: () => {
+      if (rest.longBlink(performance.now())) return; // resting: two long blinks wake, nothing else
       const el = dwell.el || (blinkTarget && blinkTarget.isConnected ? blinkTarget : null);
       if (el && blinkBox.checked) { dwell.select(); selectNow(el); }
     },
@@ -72,7 +85,8 @@ export function startGaze({ mode = 'mouse', root }) {
 
   let point = { x: -1, y: -1 };
   let calibrating = false;
-  const setPoint = (x, y) => { point = { x, y }; };
+  let everTracked = false;
+  const setPoint = (x, y) => { point = { x, y }; if (x >= 0) everTracked = true; };
   const smoother = createPointSmoother(PRESETS[mode] || PRESETS.head);
   // raw tracker samples go through One Euro + dead zone; (-1,-1) means "no face"
   // sensitivity (0.5-2.0) scales the pointer's distance from the screen centre, so lower = a
@@ -139,7 +153,7 @@ export function startGaze({ mode = 'mouse', root }) {
       const tracker = createTracker({
         onPoint: setRaw,
         onPinch: () => { const el = dwell.el; if (el) { dwell.select(); selectNow(el); } }, // hand mode: pinch = instant select
-        onBlink: (l, r, t) => { fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
+        onBlink: (l, r, t) => { if (!rest.resting) fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
@@ -189,6 +203,7 @@ export function startGaze({ mode = 'mouse', root }) {
       return;
     }
     const k = e.key.toLowerCase();
+    if (k === 'p') { rest.toggle(); e.preventDefault(); return; }
     if (k === 'r') {
       stats.reset(); fatigue.reset(); if (resetLearning) resetLearning();
       showStatus('demo reset', 'ok');
@@ -207,7 +222,7 @@ export function startGaze({ mode = 'mouse', root }) {
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
     // every confirmed selection is a calibration sample + one point on the accuracy sparkline
-    if (!calibrating && !(mode === 'mouse' && !jitter) && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
+    if (!calibrating && !rest.resting && !(mode === 'mouse' && !jitter) && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
       const b = el.getBoundingClientRect();
       const cx = (b.left + b.right) / 2; const cy = (b.top + b.bottom) / 2;
       stats.addError(Math.hypot(point.x - cx, point.y - cy));
@@ -238,12 +253,15 @@ export function startGaze({ mode = 'mouse', root }) {
       if (plainMouse) {
         const hit = document.elementFromPoint(point.x, point.y);
         target = hit && hit.closest('[data-gaze-target]');
+        if (rest.resting && !rest.allowed(target)) target = null;
       } else {
-        rects = collectRects();
+        rects = rest.filterRects(collectRects());
         target = targeter.update(point, rects, now);
       }
     }
 
+    if (rest.quiet) target = null;
+    rest.tick(now, { calibrating, faceMissing: mode !== 'mouse' && everTracked && point.x < 0 });
     const r = dwell.update(target, now, (el) => (el.dataset.gazeDwell ? Number(el.dataset.gazeDwell) : 1200 * fatigue.dwellScale));
     if (r.el !== hoverEl) { hoverEl = r.el; hoverStart = now; }
     if (hovered && hovered !== r.el) { hovered.classList.remove('gaze-hover'); hovered.style.setProperty('--dwell', 0); hovered = null; }
@@ -252,7 +270,7 @@ export function startGaze({ mode = 'mouse', root }) {
       r.el.classList.add('gaze-hover');
       r.el.style.setProperty('--dwell', r.progress);
     }
-    if (r.fired) { fatigue.selected(now - hoverStart); selectNow(r.fired); }
+    if (r.fired) { if (!rest.resting) fatigue.selected(now - hoverStart); selectNow(r.fired); }
 
     // cursor: centre of the snapped target for camera modes, else the pointer itself
     const c = !plainMouse && target ? targeter.center(target, rects) : null;

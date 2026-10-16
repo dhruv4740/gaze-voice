@@ -52,3 +52,13 @@ canvas.gaze-hand-skeleton { z-index: 901; opacity: .9; }
 /* Shift+H: clean projector view */
 body.gaze-clean #gaze-ui, body.gaze-clean #gaze-stats, body.gaze-clean video.gaze-head-preview, body.gaze-clean canvas.gaze-hand-skeleton,
 body.gaze-clean #webgazerVideoContainer, body.gaze-clean #gaze-raw { display: none !important; }
+
+/* rest mode */
+#gaze-rest { position: fixed; inset: 0; z-index: 1050; background: rgba(5,6,10,.9); }
+#gaze-rest[hidden] { display: none; }
+#gaze-wake { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); width: 440px; height: 96px;
+  border: 0; border-radius: 20px; background: #4fc3f7; color: #0f1115; font-size: 38px; font-weight: 700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+#gaze-wake span { font-size: 16px; font-weight: 400; opacity: .8; }
+#gaze-wake.gaze-hover { box-shadow: 0 0 0 calc(var(--dwell, 0) * 18px) rgba(129,199,132,.8); }
+#gaze-rest .rest-note { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #fff; opacity: .25; font-size: 56px; }
