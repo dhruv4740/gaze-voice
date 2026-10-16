@@ -4,8 +4,8 @@ import { startGaze } from './gaze/index.js';
 import { startConversation } from './conversation/index.js';
 
 const params = new URLSearchParams(location.search);
-// ?mode=mouse | eyes | head  (mouse works today; eyes/head arrive from Team A)
-const mode = params.get('mode') || 'mouse';
+// ?mode=mouse | eyes | iris | head; default head (steadiest), falls back to mouse if the camera is denied
+const mode = params.get('mode') || 'head';
 
 startConversation(document.getElementById('app'));
 startGaze({ mode, root: document.getElementById('gaze-root') });

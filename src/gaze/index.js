@@ -36,9 +36,12 @@ export function startGaze({ mode = 'mouse', root }) {
   ui.appendChild(sw);
 
   const stats = createStats({ root });
-  const fatigue = createFatigue({ root });
+  const fatigue = createFatigue();
   window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
   setInterval(() => stats.update(fatigue.stats()), 1000);
+  const pageStart = performance.now();
+  let resetLearning = null; // camera tracker's resetLearning(), keeps the calibration
+  let quickRecal = null;
   let learner = null; // camera tracker's learn(x, y), set once tracking starts
   startCaregiverLink({ ui });
   const statsBtn = document.createElement('button');
@@ -116,6 +119,10 @@ export function startGaze({ mode = 'mouse', root }) {
         },
       });
       return tracker.start().then(() => {
+        const ready = Math.round(performance.now() - pageStart);
+        console.info(`[gaze] camera + model ready ${ready} ms after page load`);
+        window.__gazeReadyMs = ready;
+        resetLearning = tracker.resetLearning ? tracker.resetLearning.bind(tracker) : null;
         learner = tracker.learn ? tracker.learn.bind(tracker) : null;
         const recal = document.createElement('button');
         recal.id = 'gaze-recal';
@@ -130,25 +137,39 @@ export function startGaze({ mode = 'mouse', root }) {
           calibrating = false;
         };
         recal.onclick = async () => { if (calibrating) return; await tracker.reset(); calibrate(); };
+        quickRecal = () => recal.click();
         return calibrate();
       });
     }).catch((err) => {
       console.warn('camera mode failed, falling back to mouse:', err);
       calibrating = false;
       mode = 'mouse';
-      showStatus(`${err.message}: using mouse`, 'bad');
+      showStatus(`${err.message}: using mouse. Allow the camera, then reload`, 'bad');
     });
   } else if (mode !== 'mouse') {
     console.warn(`gaze mode "${mode}" not built yet, using mouse`);
     mode = 'mouse';
   }
 
+  // caregiver shortcuts: Shift+R demo reset, Shift+C recalibrate, Shift+H clean projector view
+  window.addEventListener('keydown', (e) => {
+    if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+    const k = e.key.toLowerCase();
+    if (k === 'r') {
+      stats.reset(); fatigue.reset(); if (resetLearning) resetLearning();
+      showStatus('demo reset', 'ok');
+    } else if (k === 'c') { if (quickRecal) quickRecal(); }
+    else if (k === 'h') document.body.classList.toggle('gaze-clean');
+    else return;
+    e.preventDefault();
+  });
+
   const targeter = createTargeter();
   const dwell = createDwell();
   let hovered = null;
   let hoverEl = null;
   let hoverStart = 0;
-  const breakTile = document.getElementById('gaze-break');
 
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
@@ -157,7 +178,7 @@ export function startGaze({ mode = 'mouse', root }) {
       const b = el.getBoundingClientRect();
       const cx = (b.left + b.right) / 2; const cy = (b.top + b.bottom) / 2;
       stats.addError(Math.hypot(point.x - cx, point.y - cy));
-      if (learner && el !== breakTile) learner(cx, cy);
+      if (learner) learner(cx, cy);
     }
     el.dispatchEvent(new CustomEvent('gaze-select', { bubbles: true }));
     el.classList.remove('gaze-hover');

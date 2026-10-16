@@ -2,10 +2,10 @@
 // network use is WebGazer's own model download. Mouse training is disabled: we feed
 // it calibration clicks explicitly via record().
 import webgazer from 'webgazer';
+import { pick } from './models.js';
 
 const LOST_AFTER_MS = 800;
 const MODEL_TIMEOUT_MS = 180000;
-const FACE_MESH_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619';
 
 export function createEyesTracker({ onPoint, onStatus, preview = true }) {
   let started = false;
@@ -21,7 +21,7 @@ export function createEyesTracker({ onPoint, onStatus, preview = true }) {
     // WebGazer expects its face-mesh wasm/model files next to the page at ./mediapipe/face_mesh,
     // which Vite does not serve (it answers with index.html), so the detector never started and
     // no prediction ever arrived. Load the same files from the CDN, version-matched.
-    webgazer.params.faceMeshSolutionPath = FACE_MESH_PATH;
+    webgazer.params.faceMeshSolutionPath = await pick('faceMesh', 'face_mesh.binarypb');
     webgazer.setRegression('ridge').setGazeListener((data) => {
       if (!data) return;
       lastSeen = performance.now();
