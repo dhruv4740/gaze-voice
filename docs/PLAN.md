@@ -17,7 +17,7 @@ Interface: [CONTRACT.md](CONTRACT.md).
 2. Small commits, push at least every ~45 min (judges read history; big last-minute
    commits can be flagged).
 3. Open a PR to `main`; Opus reviews; fix; merge; pull `main` before the next piece.
-4. Never commit `.env.local` or any key. Credit every library in `CREDITS.md`.
+4. Never commit `.env.local` or any key. Credit every library in the README Credits section.
 
 ## Milestones
 | By | Team A (gaze) | Team B (conversation) |

@@ -33,7 +33,7 @@ The screen the patient sees, and the AI that predicts what they want to say.
    dismiss by dwell.
 
 ## Rules
-- Touch only `src/conversation/**` (and `CREDITS.md` for libraries). Changes to
+- Touch only `src/conversation/**` (and the README Credits section for libraries). Changes to
   `index.html`, `src/main.js`, `src/styles.css` -> ask Dhruv first.
 - Never commit `.env.local` or the key.
 - Branch `feat/conversation-*`, small commits (`feat(conversation): ...`), push often,

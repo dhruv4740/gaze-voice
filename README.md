@@ -20,4 +20,12 @@ Open `/?mode=mouse` (hover = look), `/?mode=eyes` (WebGazer eye tracking) or `/?
 
 The two halves only talk through [docs/CONTRACT.md](docs/CONTRACT.md).
 
-More: [docs/PLAN.md](docs/PLAN.md) · [CREDITS.md](CREDITS.md)
+More: [docs/PLAN.md](docs/PLAN.md) · [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md)
+
+## Credits
+All code was written during the event on 16 Oct 2026, with AI coding assistants
+(Claude by Anthropic). Libraries and APIs used: [Vite](https://vite.dev) (MIT),
+[WebGazer.js](https://webgazer.cs.brown.edu) (GPLv3),
+[MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe) (Apache-2.0),
+[Groq API](https://groq.com) with openai/gpt-oss-20b, Google Gemini API (fallback),
+and the browser Web Speech API.
