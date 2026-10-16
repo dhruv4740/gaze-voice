@@ -71,6 +71,10 @@ function run(modeStr, root, selectStr) {
   const ui = document.createElement('div');
   ui.id = 'gaze-ui';
   root.appendChild(ui);
+  const ctrlBtn = document.createElement('button');
+  ctrlBtn.id = 'gaze-controls-btn'; ctrlBtn.textContent = 'Controls'; ctrlBtn.setAttribute('aria-expanded', 'false');
+  ctrlBtn.onclick = () => ctrlBtn.setAttribute('aria-expanded', String(ui.classList.toggle('open')));
+  ui.appendChild(ctrlBtn);
   const statusEl = document.createElement('div');
   statusEl.id = 'gaze-status';
   ui.appendChild(statusEl);
