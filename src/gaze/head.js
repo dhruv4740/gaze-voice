@@ -3,6 +3,7 @@
 // model file are only downloaded.
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { LOCAL, CDN, localAvailable } from './models.js';
+import { createMeter } from './camera.js';
 
 const NOSE_TIP = 1;
 const LOST_AFTER_MS = 800;
@@ -107,9 +108,12 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     step(performance.now());
   }
 
+  const meter = createMeter('face');
   function step(now) {
     if (!running) return;
+    const c0 = performance.now();
     const res = landmarker.detectForVideo(video, now);
+    meter(now, performance.now() - c0);
     const lms = res.faceLandmarks && res.faceLandmarks[0];
     const f = lms && features(lms);
     if (!f) {
