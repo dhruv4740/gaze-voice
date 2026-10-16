@@ -1,6 +1,7 @@
 // Groq API integration for contextual AAC reply prediction
 
 import { getOfflineReplies } from './categories.js';
+import { getCompactMemoryPrompt, rankRepliesByMemory } from './memory.js';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -18,20 +19,17 @@ export async function predictReplies({ utterance, history = [], profile, languag
 
   if (!apiKey || apiKey.trim() === '') {
     console.warn('VITE_GROQ_API_KEY not configured. Using offline AAC reply fallback.');
-    return getOfflineReplies(utterance, language);
+    return rankRepliesByMemory(getOfflineReplies(utterance, language));
   }
 
   const timeOfDay = getTimeOfDay();
   const isHi = language.startsWith('hi');
+  const memorySnippet = getCompactMemoryPrompt();
 
   const systemPrompt = `You are an AI assistant for a non-verbal patient using an eye-gaze communication device.
-Patient Profile:
-- Name: ${profile?.name || 'Aarav'}
-- Condition: ${profile?.condition || 'Speech impaired'}
-- Key People: ${profile?.familyNames || 'Family and Doctor'}
-- Usual Needs: ${profile?.usualNeeds || 'Water, reposition, medicine'}
-- Time of day: ${timeOfDay}
-- Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
+${memorySnippet}
+Time of day: ${timeOfDay}
+Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
 
 Rules:
 1. Based on what was just heard, conversation history, and profile, output exactly 6 reply options for the patient.
@@ -100,7 +98,7 @@ Rules:
 
     if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
       // Validate and clean each reply to <= 8 words
-      return parsed.replies.slice(0, 6).map((r, i) => {
+      const cleaned = parsed.replies.slice(0, 6).map((r, i) => {
         let text = (r.text || '').trim();
         const words = text.split(/\s+/);
         if (words.length > 8) text = words.slice(0, 8).join(' ');
@@ -110,6 +108,7 @@ Rules:
           text
         };
       });
+      return rankRepliesByMemory(cleaned);
     }
 
     return await predictRepliesWithGemini({ utterance, history, profile, language });
@@ -200,7 +199,7 @@ JSON format:
     const parsed = JSON.parse(rawText);
 
     if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
-      return parsed.replies.slice(0, 6).map((r, i) => {
+      const cleaned = parsed.replies.slice(0, 6).map((r, i) => {
         let text = (r.text || '').trim();
         const words = text.split(/\s+/);
         if (words.length > 8) text = words.slice(0, 8).join(' ');
@@ -210,6 +209,7 @@ JSON format:
           text
         };
       });
+      return rankRepliesByMemory(cleaned);
     }
   } catch (err) {
     console.warn('Gemini fallback failed:', err);
