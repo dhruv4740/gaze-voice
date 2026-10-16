@@ -1,0 +1,20 @@
+/* Shared base styles. Team-specific styles live in each team's folder. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0f1115; color: #f2f2f2;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+/* Contract: any [data-gaze-target] gets these while being dwelled on. */
+[data-gaze-target] { position: relative; }
+[data-gaze-target].gaze-hover { outline: 4px solid #4fc3f7; }
+[data-gaze-target].gaze-hover::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 8px;
+  width: calc(var(--dwell, 0) * 100%); background: #4fc3f7;
+}
+
+#gaze-cursor { position: fixed; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border-radius: 50%; background: rgba(79,195,247,.6); pointer-events: none; z-index: 1000; }
+
+/* Placeholder layout; Team B replaces with src/conversation styles. */
+#heard { margin: 16px; font-size: 1.4rem; opacity: .8; }
+#tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; height: 75vh; }
+#tiles button { font-size: 2rem; border: 0; border-radius: 16px; background: #1d2230; color: inherit; }
