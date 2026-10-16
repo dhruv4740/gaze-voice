@@ -1,0 +1,14 @@
+/* Team A styles: calibration, status, WebGazer preview. */
+#webgazerVideoContainer.gaze-preview {
+  left: auto !important; top: auto !important; right: 8px; bottom: 8px;
+  width: 160px !important; height: 120px !important; opacity: .7; z-index: 900 !important;
+  border-radius: 8px; overflow: hidden;
+}
+#webgazerVideoContainer.gaze-preview video,
+#webgazerVideoContainer.gaze-preview canvas { width: 160px !important; height: 120px !important; }
+#webgazerGazeDot, #webgazerFaceOverlay, #webgazerFaceFeedbackBox { display: none !important; }
+
+#gaze-status { position: fixed; left: 8px; bottom: 8px; z-index: 1200; font-size: 13px;
+  padding: 4px 10px; border-radius: 12px; background: rgba(0,0,0,.65); color: #fff; }
+#gaze-status.ok { color: #81c784; }
+#gaze-status.bad { color: #ef9a9a; }
