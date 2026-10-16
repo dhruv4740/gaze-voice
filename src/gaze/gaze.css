@@ -96,3 +96,9 @@ body.gaze-scan #gaze-cursor, body.gaze-scan #gaze-raw { display: none !important
 /* cooldown after a selection: tiles dim a little and the cursor goes hollow */
 body.gaze-cooldown [data-gaze-target]:not([data-gaze-always]):not(#gaze-wake) { opacity: .6; transition: opacity .15s; }
 body.gaze-cooldown #gaze-cursor { opacity: .45; }
+
+/* X-ray mode: enlarged camera preview bottom-left, one overlay canvas above the page */
+#gaze-xray { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1150; pointer-events: none; }
+#gaze-xray[hidden] { display: none; }
+body.xray video.gaze-head-preview { left: 8px; right: auto; bottom: 8px; width: 320px; height: 240px; opacity: .95; z-index: 1140; }
+body.xray canvas.gaze-hand-skeleton { display: none; }

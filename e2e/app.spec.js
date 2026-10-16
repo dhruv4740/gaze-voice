@@ -229,3 +229,35 @@ test('9. Shift+P pause blocks selection; emergency still works', async ({ page }
   await hover(page, '.conv-tile-emergency');
   await expect.poll(() => ev(page, 'emergency'), { timeout: 7000 }).toBe(1);
 });
+
+test('10. X-ray mode toggles with Shift+X, draws, and throws nothing', async ({ page }) => {
+  await prep(page);
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto('/?mode=mouse');
+  await page.waitForSelector('.core-wait');
+  await expect(page.locator('#gaze-xray')).toBeHidden();
+  await page.keyboard.press('Shift+X');
+  await expect(page.locator('#gaze-xray')).toBeVisible();
+  await hover(page, '.core-wait');
+  await page.waitForTimeout(700);
+  // something was drawn (panel background is the first pixel block)
+  const drawn = await page.evaluate(() => { const c = document.getElementById('gaze-xray'); return c.getContext('2d').getImageData(20, 20, 1, 1).data[3]; });
+  expect(drawn).toBeGreaterThan(0);
+  await page.screenshot({ path: 'test-results/xray-mouse.png' });
+  await page.click('#gaze-xray-btn');
+  await expect(page.locator('#gaze-xray')).toBeHidden();
+  expect(errs).toEqual([]);
+});
+
+test('10b. X-ray with a (fake) camera in head+hand mode', async ({ page }) => {
+  await prep(page);
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto('/?mode=head%2Bhand&select=dwell');
+  await page.waitForSelector('#slot-agree');
+  await page.keyboard.press('Shift+X');
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: 'test-results/xray-cam.png' });
+  expect(errs).toEqual([]);
+});

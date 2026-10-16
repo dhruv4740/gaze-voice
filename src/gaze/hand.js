@@ -10,7 +10,7 @@ const REGION = 0.6; // central share of the frame that maps onto the whole scree
 export const PINCH_ON = 0.3; // thumb-index distance / hand size below this = pinched
 export const PINCH_OFF = 0.5; // ...and it must open past this before the next pinch
 export const PINCH_FREEZE = 0.7; // pointer holds still from here on, so closing the fingers does not move it
-const CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+export const CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -40,6 +40,7 @@ export function createPinch() {
 export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
   let video = null; let canvas = null; let stream = null; let landmarker = null;
   let raf = 0; let running = false; let lastSeen = 0; let status = ''; let lastVideoTime = -1;
+  let lastLm = null; // for X-ray mode
   let held = null; // pointer position held while the fingers close
   const pinch = createPinch();
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
@@ -104,6 +105,7 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
     const c0 = performance.now();
     const lm = landmarker.detectForVideo(video, now).landmarks?.[0];
     meter(now, performance.now() - c0);
+    lastLm = lm || null;
     draw(lm);
     if (!lm) {
       if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); held = null; }
@@ -127,5 +129,5 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
     canvas?.remove(); landmarker?.close();
   }
 
-  return { start, stop, record() {}, reset: async () => {}, resetLearning() {} };
+  return { start, stop, record() {}, reset: async () => {}, resetLearning() {}, debug: () => ({ hand: lastLm }) };
 }
