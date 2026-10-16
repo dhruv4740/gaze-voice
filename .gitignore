@@ -5,3 +5,5 @@ dist/
 *.pdf
 .DS_Store
 public/models/
+test-results/
+playwright-report/

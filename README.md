@@ -89,3 +89,6 @@ The start screen has two checkbox groups plus a Start button (mouse, or Tab + Sp
 
 ### Ask from the caregiver phone
 `caregiver.html` has an "Ask a question" bar (typed, quick chips, or mic where the browser allows it: needs https or localhost, so over a hotspot IP the mic hides and typing works). The laptop receives it as `aac:remote-question` (see `docs/CONTRACT.md`); the patient's spoken reply appears under the question on the phone. "Also speak aloud on laptop" voices the question there.
+
+### End-to-end tests
+`npm run e2e` runs Playwright (chromium) against its own servers on :5190 (app) and :8795 (relay). Groq and Gemini are mocked, the camera is Chromium's fake device. First time: `npx playwright install chromium`. `test.fixme` / `test.fail` mark known Team B gaps.
