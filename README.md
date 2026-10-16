@@ -86,3 +86,12 @@ The start screen has two checkbox groups plus a Start button (mouse, or Tab + Sp
 - Each landmarker runs only if its input is chosen; face + hand share one camera stream. A mouse that is moving takes the pointer from the camera sources.
 - HUD chips show the active inputs. For tests: `window.__gazeDebug` = `{mode, sources, select, active, point, fps, lastSelectSource}`; `fps` is per landmarker (`{face, hand}`: `{fps, ms}`).
 
+
+### Ask from the caregiver phone
+`caregiver.html` has an "Ask a question" bar (typed, quick chips, or mic where the browser allows it: needs https or localhost, so over a hotspot IP the mic hides and typing works). The laptop receives it as `aac:remote-question` (see `docs/CONTRACT.md`); the patient's spoken reply appears under the question on the phone. "Also speak aloud on laptop" voices the question there.
+
+### End-to-end tests
+`npm run e2e` runs Playwright (chromium) against its own servers on :5190 (app) and :8795 (relay). Groq and Gemini are mocked, the camera is Chromium's fake device. First time: `npx playwright install chromium`. `test.fixme` / `test.fail` mark known Team B gaps.
+
+### Technical overview and X-ray
+How the pipeline works, with numbers: [docs/TECHNICAL.md](docs/TECHNICAL.md). Press **Shift+X** (or the HUD X-ray button) to see it live: landmarks on the camera preview, raw (red) vs smoothed (yellow) point, snapped target (green), lock-on, speed, dwell and refractory bars, fps and calibration error.

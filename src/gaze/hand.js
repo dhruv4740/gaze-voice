@@ -4,13 +4,14 @@
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { LOCAL, CDN, localAvailable } from './models.js';
 import { createMeter } from './camera.js';
+import { createHold } from './handhold.js';
 
 const LOST_AFTER_MS = 800;
 const REGION = 0.6; // central share of the frame that maps onto the whole screen
 export const PINCH_ON = 0.3; // thumb-index distance / hand size below this = pinched
 export const PINCH_OFF = 0.5; // ...and it must open past this before the next pinch
 export const PINCH_FREEZE = 0.7; // pointer holds still from here on, so closing the fingers does not move it
-const CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+export const CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -40,8 +41,10 @@ export function createPinch() {
 export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
   let video = null; let canvas = null; let stream = null; let landmarker = null;
   let raf = 0; let running = false; let lastSeen = 0; let status = ''; let lastVideoTime = -1;
+  let lastLm = null; // for X-ray mode
   let held = null; // pointer position held while the fingers close
   const pinch = createPinch();
+  const hold = createHold(); // on pinch, rewind to where the fingertip was before the fingers started closing
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
 
   async function start() {
@@ -104,18 +107,17 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
     const c0 = performance.now();
     const lm = landmarker.detectForVideo(video, now).landmarks?.[0];
     meter(now, performance.now() - c0);
+    lastLm = lm || null;
     draw(lm);
     if (!lm) {
-      if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); held = null; }
+      if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); hold.reset(); held = null; }
       return;
     }
     lastSeen = now;
     setStatus('tracking');
     const st = pinch.update(pinchRatio(lm));
-    if (!st.frozen || !held) {
-      const { u, v } = boxMap(lm);
-      held = { x: u * window.innerWidth, y: v * window.innerHeight };
-    }
+    const { u, v } = boxMap(lm);
+    held = hold.update(u * window.innerWidth, v * window.innerHeight, now, st.frozen);
     onPoint(held.x, held.y);
     if (st.justPinched) onPinch?.();
   }
@@ -127,5 +129,5 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
     canvas?.remove(); landmarker?.close();
   }
 
-  return { start, stop, record() {}, reset: async () => {}, resetLearning() {} };
+  return { start, stop, record() {}, reset: async () => {}, resetLearning() {}, debug: () => ({ hand: lastLm }) };
 }

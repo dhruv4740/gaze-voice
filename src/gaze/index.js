@@ -7,6 +7,8 @@ import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
 import { createRest } from './rest.js';
+import { createXray } from './xray.js';
+import { createNight } from './night.js';
 import { createScanner, DEFAULT_STEP_MS } from './scan.js';
 import { pickInput, savedInput } from './picker.js';
 import { parseMode, parseSelect } from './inputs.js';
@@ -51,7 +53,12 @@ function run(modeStr, root, selectStr) {
     get lastSelectSource() { return lastSelect; },
     get active() { return mouseActive ? 'mouse' : handLead() ? 'hand' : point.x >= 0 ? (camId || 'mouse') : 'none'; },
     get point() { return { ...point }; },
+    get lum() { return night ? night.lum : null; },
+    get night() { return night ? night.on : false; },
+    get nightScan() { return night ? night.scanning : false; },
+    setLum(v) { night?.setLum(v); },
   };
+  let night = null;
   const cursor = document.createElement('div');
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
@@ -64,6 +71,10 @@ function run(modeStr, root, selectStr) {
   const ui = document.createElement('div');
   ui.id = 'gaze-ui';
   root.appendChild(ui);
+  const ctrlBtn = document.createElement('button');
+  ctrlBtn.id = 'gaze-controls-btn'; ctrlBtn.textContent = 'Controls'; ctrlBtn.setAttribute('aria-expanded', 'false');
+  ctrlBtn.onclick = () => ctrlBtn.setAttribute('aria-expanded', String(ui.classList.toggle('open')));
+  ui.appendChild(ctrlBtn);
   const statusEl = document.createElement('div');
   statusEl.id = 'gaze-status';
   ui.appendChild(statusEl);
@@ -104,6 +115,13 @@ function run(modeStr, root, selectStr) {
   restBtn.textContent = 'Pause';
   restBtn.onclick = () => rest.toggle();
   ui.appendChild(restBtn);
+  const xray = createXray({ root });
+  const xrayBtn = document.createElement('button');
+  xrayBtn.id = 'gaze-xray-btn';
+  xrayBtn.textContent = 'X-ray';
+  xrayBtn.onclick = () => xray.toggle();
+  ui.appendChild(xrayBtn);
+  night = createNight({ root, lost: () => point.x < 0, select: (el) => selectNow(el, 'scan'), status: showStatus, forceDark: params.get('dark') === '1' });
 
   // per-patient timing: dwell time (per input mode) and the pause after every selection
   const lsNum = (k, d) => Number(localStorage.getItem(k)) || d;
@@ -129,6 +147,8 @@ function run(modeStr, root, selectStr) {
   const pageStart = performance.now();
   let resetLearning = null; // camera tracker's resetLearning(), keeps the calibration
   let quickRecal = null;
+  let trackerDebug = null; // camera tracker's debug(): landmarks, calibration error, sample counts
+  const rawPts = { face: null, hand: null, mouse: null }; // X-ray: points before smoothing
   let learner = null; // camera tracker's learn(x, y), set once tracking starts
   startCaregiverLink({ ui });
   const statsBtn = document.createElement('button');
@@ -248,12 +268,13 @@ function run(modeStr, root, selectStr) {
   const setRaw = (x, y, from) => {
     const s = camHand || from === 'hand' ? 'hand' : 'face';
     const sm = s === 'hand' ? handSm : faceSm;
-    if (x < 0) { sm.reset(); src[s] = null; merge(); return; }
+    if (x < 0) { sm.reset(); src[s] = null; rawPts[s] = null; merge(); return; }
     if (s === 'face' && gainOn && gain !== 1) {
       const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
       x = Math.min(window.innerWidth, Math.max(0, cx + (x - cx) * gain));
       y = Math.min(window.innerHeight, Math.max(0, cy + (y - cy) * gain));
     }
+    rawPts[s] = { x, y };
     const p = sm.filter(x, y, performance.now());
     src[s] = { x: p.x, y: p.y };
     if (s === 'hand') handT = performance.now();
@@ -323,6 +344,7 @@ function run(modeStr, root, selectStr) {
         console.info(`[gaze] camera + model ready ${ready} ms after page load`);
         window.__gazeReadyMs = ready;
         resetLearning = tracker.resetLearning ? tracker.resetLearning.bind(tracker) : null;
+        trackerDebug = tracker.debug ? tracker.debug.bind(tracker) : null;
         learner = tracker.learn ? tracker.learn.bind(tracker) : null;
         if (!cfg.face && !cfg.eyes) return null; // hand needs no calibration
         const recal = document.createElement('button');
@@ -364,6 +386,7 @@ function run(modeStr, root, selectStr) {
       showStatus('demo reset', 'ok');
     } else if (k === 'c') { if (quickRecal) quickRecal(); }
     else if (k === 'h') document.body.classList.toggle('gaze-clean');
+    else if (k === 'x') xray.toggle();
     else return;
     e.preventDefault();
   });
@@ -461,6 +484,27 @@ function run(modeStr, root, selectStr) {
     cursor.style.top = `${shown.y}px`;
     rawDot.style.left = `${point.x}px`;
     rawDot.style.top = `${point.y}px`;
+    night.tick(now);
+    xray.frame(now, () => {
+      const rect = target && (rects.find((q) => q.el === target) || target.getBoundingClientRect());
+      const dbg = trackerDebug ? trackerDebug() : null;
+      const fps = window.__gazeFps || {};
+      const presetKey = faceMode || (cfg.eyes ? 'eyes' : cfg.hand ? 'hand' : null);
+      return {
+        dbg, point, locked: !!f.locked, fast: f.fast, speed: inter.gate.speed, heldMs: inter.gate.heldMs(now),
+        progress: sel.has('dwell') ? r.progress : 0, dwellMs, coolLeft: inter.coolLeft(now), refractoryMs,
+        target: rect && { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+        raw: mouseActive ? { mouse: mouse.x >= 0 ? mouse : null } : { face: rawPts.face, hand: rawPts.hand },
+        smooth: mouseActive ? {} : { face: src.face, hand: src.hand },
+        lines: (drawFps) => [
+          `inputs ${cfg.parts.join('+')}  select ${[...sel].join('+')}`,
+          `fps ${Object.entries(fps).map(([k, v]) => `${k} ${v.fps} (${v.ms} ms/frame)`).join('  ') || 'no camera'}  overlay ${drawFps}`,
+          presetKey ? xray.params(presetKey, gain) : 'mouse: no smoothing',
+          `calibration error ${dbg?.calibErr != null ? Math.round(dbg.calibErr) + ' px' : 'n/a'}  samples ${dbg ? dbg.pairs : 0} + learned ${dbg ? dbg.learned : 0}`,
+          `snap ${f.fast ? 'frozen' : 'on'}  cooldown ${f.cooling ? 'yes' : 'no'}  mode ${mode}`,
+        ],
+      };
+    });
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);

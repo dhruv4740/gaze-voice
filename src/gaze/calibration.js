@@ -101,7 +101,7 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
       dot.disabled = true;
       dot.textContent = '';
       place({ fx: 0.5, fy: 0.5 });
-      msg.textContent = 'Hold your gaze on the centre dot…';
+      msg.textContent = 'Hold your gaze on the centre dot...';
       const start = performance.now();
       let sum = 0; let n = 0;
       (function sample(now) {

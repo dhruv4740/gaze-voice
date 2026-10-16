@@ -1,98 +1,126 @@
-/* Team A styles: calibration, status, WebGazer preview. */
-#webgazerVideoContainer.gaze-preview {
-  left: auto !important; top: auto !important; right: 8px; bottom: 8px;
-  width: 160px !important; height: 120px !important; opacity: .6; z-index: 900 !important;
-  border-radius: 8px; overflow: hidden; pointer-events: none;
-}
-#webgazerVideoContainer.gaze-preview video,
-#webgazerVideoContainer.gaze-preview canvas { width: 160px !important; height: 120px !important; }
+/* Gaze UI: one quiet "Controls" button in the corner, calm centred overlays.
+   Tokens (shared with the conversation UI): bg #0f1115, surface #181b21, border #2a2e36,
+   text #e6e8eb, muted #8b919a, accent teal #2dd4bf (dwell / focus / active only), red #ef4444 (emergency only).
+   No gradients, glows or shadows, no emojis. */
+:root { --g-bg: #0f1115; --g-surface: #181b21; --g-border: #2a2e36; --g-text: #e6e8eb; --g-muted: #8b919a; --g-accent: #2dd4bf; --g-red: #ef4444; }
+
+/* gaze visuals: a dot and the dwell ring on the tile are the only things drawn on the page */
+body [data-gaze-target].gaze-hover { outline: 3px solid var(--g-accent); }
+body [data-gaze-target].gaze-hover::after { background: var(--g-accent); }
+#gaze-cursor { background: rgba(45,212,191,.55); border: 2px solid var(--g-accent); }
+#gaze-cursor.closed { background: rgba(230,232,235,.35); border-color: var(--g-text); }
+#gaze-raw { position: fixed; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(230,232,235,.3); pointer-events: none; z-index: 1000; }
+
+/* camera preview: small, bottom-left, quiet; enlarged by X-ray */
+#webgazerVideoContainer.gaze-preview { left: 12px !important; top: auto !important; right: auto !important; bottom: 12px !important;
+  width: 112px !important; height: 84px !important; opacity: .5; z-index: 900 !important; border-radius: 8px; overflow: hidden; pointer-events: none; }
+#webgazerVideoContainer.gaze-preview video, #webgazerVideoContainer.gaze-preview canvas { width: 112px !important; height: 84px !important; }
 #webgazerGazeDot, #webgazerFaceOverlay, #webgazerFaceFeedbackBox { display: none !important; }
+video.gaze-head-preview, canvas.gaze-hand-skeleton { position: fixed; left: 12px; right: auto; bottom: 12px; width: 112px; height: 84px;
+  opacity: .5; transform: scaleX(-1); border-radius: 8px; z-index: 900; pointer-events: none; object-fit: cover; }
+canvas.gaze-hand-skeleton { z-index: 901; opacity: .8; }
 
-#gaze-ui { position: fixed; left: 50%; transform: translateX(-50%); bottom: 2px; z-index: 1200; display: flex;
-  flex-direction: row; align-items: center; gap: 6px; font-size: 11px; }
-#gaze-ui > * { font-size: 11px; padding: 2px 8px; border-radius: 12px; border: 0;
-  background: rgba(0,0,0,.7); color: #fff; cursor: pointer; }
-#gaze-status { cursor: default !important; }
-#gaze-blink input { margin-right: 4px; }
-#gaze-cursor.closed { background: rgba(239,83,80,.8); }
-#gaze-stats { position: fixed; right: 8px; top: 8px; z-index: 1200; padding: 10px 14px;
-  border-radius: 10px; background: rgba(0,0,0,.8); font-size: 14px; line-height: 1.5; }
+/* controls: collapsed by default (just the button and any status line); .open shows the panel */
+#gaze-ui { position: fixed; right: 12px; bottom: 12px; left: auto; transform: none; z-index: 1200; display: flex; flex-direction: column;
+  align-items: stretch; gap: 6px; width: 260px; font: 13px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; color: var(--g-text); }
+#gaze-ui > * { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--g-border);
+  background: var(--g-surface); color: var(--g-text); cursor: pointer; text-align: left; }
+#gaze-ui > #gaze-controls-btn { order: 99; align-self: flex-end; width: auto; text-align: center; padding: 7px 14px; }
+#gaze-ui > #gaze-controls-btn[aria-expanded="true"] { border-color: var(--g-accent); color: var(--g-accent); }
+#gaze-ui > #gaze-status { order: 98; align-self: flex-end; width: auto; cursor: default; background: transparent; border-color: transparent; color: var(--g-muted); padding: 2px 4px; font-size: 12px; text-align: right; }
+#gaze-ui:not(.open) > :not(#gaze-controls-btn):not(#gaze-status) { display: none; }
+#gaze-ui > #gaze-status.ok, #gaze-ui > #gaze-status.bad { color: var(--g-text); }
+#gaze-ui > #gaze-status:empty { display: none; }
+#gaze-ui > select { padding: 6px 8px; }
+#gaze-ui > label { display: flex; align-items: center; gap: 6px; cursor: default; }
+#gaze-ui > label input[type=range] { flex: 1; min-width: 0; accent-color: var(--g-accent); }
+#gaze-gain { width: auto; }
+#gaze-blink input { margin-right: 4px; accent-color: var(--g-accent); }
+#gaze-ui > #gaze-recal { background: var(--g-surface); color: var(--g-accent); border-color: var(--g-accent); }
+#gaze-ui > #gaze-night-btn.on { border-color: var(--g-accent); color: var(--g-accent); }
+#gaze-ui > #gaze-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; background: none; border: 0; cursor: default; }
+#gaze-chips .chip { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--g-bg); color: var(--g-muted); border: 1px solid var(--g-border); }
+#gaze-chips .chip-in { color: var(--g-text); }
+#caregiver-qr { position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; background: var(--g-surface) !important; color: var(--g-muted) !important; border: 1px solid var(--g-border);
+  border-radius: 8px !important; padding: 10px !important; font-size: 11px; max-width: 220px; word-break: break-all; cursor: default !important; }
+#caregiver-qr canvas { display: block; border-radius: 4px; margin-bottom: 6px; }
+#caregiver-qr[hidden] { display: none; }
+
+#gaze-stats { position: fixed; right: 12px; top: 12px; z-index: 1200; padding: 12px 16px; border-radius: 10px; background: var(--g-surface);
+  border: 1px solid var(--g-border); color: var(--g-text); font: 13px/1.6 system-ui, -apple-system, "Segoe UI", Inter, sans-serif; min-width: 240px; }
 #gaze-stats[hidden] { display: none; }
-#gaze-status.ok { color: #81c784; }
-#gaze-status.bad { color: #ef9a9a; }
+#gaze-stats b { display: block; margin-bottom: 4px; color: var(--g-muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 11px; }
 
-#gaze-calib { position: fixed; inset: 0; z-index: 1100; background: #0f1115; }
-#gaze-calib .calib-msg { position: absolute; top: 24%; left: 50%; transform: translateX(-50%);
-  text-align: center; font-size: 1.3rem; max-width: 80%; }
-#gaze-calib .calib-msg button { margin: 16px 8px 0; padding: 12px 28px; font-size: 1.1rem;
-  border: 0; border-radius: 10px; background: #4fc3f7; color: #0f1115; cursor: pointer; }
-#gaze-calib .calib-result { font-size: 2.2rem; margin-bottom: 8px; }
-.calib-dot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
-  border: 3px solid #fff; background: #e53935; color: #fff; font-size: 1.3rem; cursor: pointer; }
+/* calibration: calm, centred, one primary action */
+#gaze-calib { position: fixed; inset: 0; z-index: 1100; background: var(--g-bg); color: var(--g-text); font-family: system-ui, -apple-system, "Segoe UI", Inter, sans-serif; }
+#gaze-calib .calib-msg { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); text-align: center; font-size: 1.1rem; max-width: 60ch; color: var(--g-muted); }
+#gaze-calib .calib-msg button { margin: 20px 6px 0; padding: 12px 28px; font-size: 1rem; border: 1px solid var(--g-border); border-radius: 10px; background: var(--g-surface); color: var(--g-text); cursor: pointer; }
+#gaze-calib .calib-msg button:last-of-type { background: var(--g-accent); border-color: var(--g-accent); color: var(--g-bg); font-weight: 600; }
+#gaze-calib .calib-result { font-size: 1.8rem; margin-bottom: 8px; color: var(--g-text); }
+.calib-dot { position: absolute; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; border: 3px solid var(--g-accent); background: var(--g-bg); color: var(--g-text); font-size: 1.1rem; cursor: pointer; }
 .calib-pulse { animation: calib-pulse .25s; }
 @keyframes calib-pulse { 50% { transform: scale(.75); } }
-#gaze-ui > #gaze-recal { background: #4fc3f7; color: #0f1115; }
-
-video.gaze-head-preview, canvas.gaze-hand-skeleton { position: fixed; right: 8px; bottom: 8px; width: 160px; height: 120px;
-  opacity: .6; transform: scaleX(-1); border-radius: 8px; z-index: 900; pointer-events: none; object-fit: cover; }
-canvas.gaze-hand-skeleton { z-index: 901; opacity: .9; }
-#gaze-gain { width: 70px; vertical-align: middle; }
-
-
-.calib-cmp { margin-top: 8px; font-size: .95rem; opacity: .7; }
-.calib-dot.calib-auto { box-shadow: 0 0 0 0 rgba(255,255,255,.9); animation: calib-ring var(--ring-ms, 1800ms) linear; }
-@keyframes calib-ring { from { box-shadow: 0 0 0 26px rgba(255,255,255,.55); } to { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
-#gaze-status:empty { display: none; }
-#gaze-raw { position: fixed; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: rgba(255,255,255,.35); pointer-events: none; z-index: 1000; }
-
-#caregiver-qr { position: absolute; bottom: 100%; left: 0; margin-bottom: 4px; background: #fff !important; color: #111 !important; border-radius: 10px !important; padding: 8px !important;
-  font-size: 10px; max-width: 200px; word-break: break-all; cursor: default !important; }
-#caregiver-qr[hidden] { display: none; }
+.calib-cmp { margin-top: 8px; font-size: .9rem; color: var(--g-muted); }
+.calib-dot.calib-auto { animation: calib-ring var(--ring-ms, 1800ms) linear; }
+@keyframes calib-ring { from { outline: 18px solid rgba(45,212,191,.35); } to { outline: 0 solid rgba(45,212,191,0); } }
 
 /* Shift+H: clean projector view */
 body.gaze-clean #gaze-ui, body.gaze-clean #gaze-stats, body.gaze-clean video.gaze-head-preview, body.gaze-clean canvas.gaze-hand-skeleton,
 body.gaze-clean #webgazerVideoContainer, body.gaze-clean #gaze-raw { display: none !important; }
 
 /* rest mode */
-#gaze-rest { position: fixed; inset: 0; z-index: 1050; background: rgba(5,6,10,.9); }
+#gaze-rest { position: fixed; inset: 0; z-index: 1050; background: rgba(15,17,21,.94); }
 #gaze-rest[hidden] { display: none; }
-#gaze-wake { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); width: 440px; height: 96px;
-  border: 0; border-radius: 20px; background: #4fc3f7; color: #0f1115; font-size: 38px; font-weight: 700;
+#gaze-wake { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 420px; height: 88px; border: 1px solid var(--g-border); border-radius: 12px;
+  background: var(--g-surface); color: var(--g-text); font: 600 30px system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
   display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
-#gaze-wake span { font-size: 16px; font-weight: 400; opacity: .8; }
-#gaze-wake.gaze-hover { box-shadow: 0 0 0 calc(var(--dwell, 0) * 18px) rgba(129,199,132,.8); }
-#gaze-rest .rest-note { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #fff; opacity: .25; font-size: 56px; }
+#gaze-wake span { font-size: 14px; font-weight: 400; color: var(--g-muted); }
+#gaze-rest .rest-note { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--g-muted); font-size: 32px; letter-spacing: .08em; }
 
 /* input picker */
-#gaze-picker { position: fixed; inset: 0; z-index: 1300; background: #0f1115; color: #fff; display: flex;
-  flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
-#gaze-picker h1 { font-size: 48px; margin: 0; }
-#gaze-picker .picker-groups { display: flex; gap: 24px; }
-#gaze-picker fieldset { border: 2px solid #2c3444; border-radius: 20px; padding: 12px 20px 16px; margin: 0; min-width: 420px; }
-#gaze-picker legend { font-size: 20px; opacity: .8; padding: 0 8px; }
-#gaze-picker .picker-opt { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 4px 12px; padding: 10px 12px; border-radius: 14px; cursor: pointer; }
-#gaze-picker .picker-opt:hover, #gaze-picker .picker-opt:focus-within { background: #1e2430; }
-#gaze-picker .picker-opt input { width: 28px; height: 28px; }
-#gaze-picker .picker-opt b { font-size: 24px; display: block; }
-#gaze-picker .picker-opt small { font-size: 15px; opacity: .65; }
-#gaze-picker .picker-opt em { grid-column: 2; font-size: 14px; color: #ffb74d; font-style: normal; }
+#gaze-picker { position: fixed; inset: 0; z-index: 6000; background: var(--g-bg); color: var(--g-text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  font-family: system-ui, -apple-system, "Segoe UI", Inter, sans-serif; }
+#gaze-picker h1 { font-size: 30px; font-weight: 600; margin: 0; }
+#gaze-picker .picker-groups { display: flex; gap: 16px; }
+#gaze-picker fieldset { border: 1px solid var(--g-border); border-radius: 12px; background: var(--g-surface); padding: 8px 12px 12px; margin: 0; min-width: 380px; }
+#gaze-picker legend { font-size: 13px; color: var(--g-muted); padding: 0 8px; }
+#gaze-picker .picker-opt { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 2px 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+#gaze-picker .picker-opt:hover, #gaze-picker .picker-opt:focus-within { background: var(--g-bg); }
+#gaze-picker .picker-opt input { width: 20px; height: 20px; accent-color: var(--g-accent); }
+#gaze-picker .picker-opt b { font-size: 18px; font-weight: 600; display: block; }
+#gaze-picker .picker-opt small { font-size: 13px; color: var(--g-muted); }
+#gaze-picker .picker-opt em { grid-column: 2; font-size: 12px; color: var(--g-muted); font-style: normal; }
 #gaze-picker .picker-opt em:empty { display: none; }
 #gaze-picker .picker-opt.off { opacity: .45; cursor: not-allowed; }
-#gaze-picker .picker-scan { border: 2px solid #2c3444; width: 896px; box-sizing: border-box; }
-#gaze-picker button { min-width: 280px; height: 80px; border: 4px solid transparent; border-radius: 24px; background: #4fc3f7; color: #0f1115;
-  font-size: 32px; font-weight: 700; cursor: pointer; }
-#gaze-picker button:disabled { background: #2c3444; color: #888; cursor: not-allowed; }
-#gaze-picker button:focus, #gaze-picker button:hover:not(:disabled) { border-color: #fff; outline: none; }
-#gaze-picker .picker-problem { color: #ffb74d; opacity: 1; min-height: 1.2em; }
-#gaze-chips { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 !important; background: none !important; }
-#gaze-chips .chip { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: #2c3444; color: #cfd8dc; }
-#gaze-chips .chip-in { background: #1565c0; color: #fff; }
-#gaze-picker p { opacity: .6; margin: 0; }
+#gaze-picker .picker-scan { border: 1px solid var(--g-border); border-radius: 12px; background: var(--g-surface); width: 776px; box-sizing: border-box; }
+#gaze-picker button { min-width: 240px; height: 56px; border: 2px solid transparent; border-radius: 12px; background: var(--g-accent); color: var(--g-bg); font-size: 20px; font-weight: 600; cursor: pointer; }
+#gaze-picker button:disabled { background: var(--g-surface); color: var(--g-muted); border-color: var(--g-border); cursor: not-allowed; }
+#gaze-picker button:focus-visible, #gaze-picker button:hover:not(:disabled) { border-color: var(--g-text); outline: none; }
+#gaze-picker .picker-problem { color: var(--g-muted); min-height: 1.2em; }
+#gaze-picker p { color: var(--g-muted); margin: 0; font-size: 13px; }
 
-/* scan mode: the row being scanned gets an outline, items use gaze-hover + --dwell */
-.gaze-scan-row { outline: 6px solid #ffb300 !important; outline-offset: 3px; }
+/* scan mode: the item being scanned gets a plain teal outline, items use gaze-hover + --dwell */
+.gaze-scan-row, .gaze-night-lit { outline: 4px solid var(--g-accent) !important; outline-offset: 3px; }
 body.gaze-scan #gaze-cursor, body.gaze-scan #gaze-raw { display: none !important; }
 
 /* cooldown after a selection: tiles dim a little and the cursor goes hollow */
 body.gaze-cooldown [data-gaze-target]:not([data-gaze-always]):not(#gaze-wake) { opacity: .6; transition: opacity .15s; }
 body.gaze-cooldown #gaze-cursor { opacity: .45; }
+
+/* X-ray mode: enlarged camera preview bottom-left, one overlay canvas above the page */
+#gaze-xray { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1150; pointer-events: none; }
+#gaze-xray[hidden] { display: none; }
+body.xray video.gaze-head-preview { left: 12px; right: auto; bottom: 12px; width: 320px; height: 240px; opacity: .95; z-index: 1140; }
+body.xray canvas.gaze-hand-skeleton { display: none; }
+
+/* night mode: warm-white frame lights the face; the app shrinks a little so tiles stay visible inside it */
+#gaze-night-frame { position: fixed; inset: 0; z-index: 900; pointer-events: none; border: 44px solid #fff3dc; }
+body.night #app { transform: scale(.9); transform-origin: center; }
+#gaze-night-banner { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6000; width: min(440px, 86vw); padding: 24px 28px; font: 600 18px/1.4 system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  border-radius: 12px; border: 1px solid var(--g-accent); background: var(--g-surface); color: var(--g-text); cursor: pointer; text-align: center; }
+#gaze-night-banner[hidden] { display: none; }
+#gaze-night-hint { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 6000; padding: 10px 18px; border-radius: 10px; background: var(--g-surface); border: 1px solid var(--g-border);
+  color: var(--g-text); font: 600 16px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; pointer-events: none; }
+#gaze-night-hint[hidden] { display: none; }
+#gaze-ui.open { background: var(--g-surface); border: 1px solid var(--g-border); border-radius: 12px; padding: 8px; }
+#gaze-ui.open > :not(#gaze-status):not(#gaze-chips) { background: var(--g-bg); }

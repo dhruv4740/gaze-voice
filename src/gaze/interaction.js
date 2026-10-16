@@ -24,6 +24,7 @@ export function createGate({ lockMs = LOCK_MS, speedMax = SPEED_MAX } = {}) {
       if (span >= 50) speed = Math.hypot(p.x - a.x, p.y - a.y) / (span / 1000);
     },
     get speed() { return speed; },
+    heldMs: (now) => now - since, // how long the current target has been stable and slow
     get fast() { return speed >= speedMax; },
     // returns the target once it is locked on (stable and slow), else null
     lock(target, now) {
@@ -35,14 +36,15 @@ export function createGate({ lockMs = LOCK_MS, speedMax = SPEED_MAX } = {}) {
   };
 }
 
-export function createInteraction({ dwellMs = () => 1200, refractoryMs = () => REFRACTORY_MS, lockMs, speedMax } = {}) {
-  const targeter = createTargeter();
+export function createInteraction({ dwellMs = () => 1200, refractoryMs = () => REFRACTORY_MS, lockMs, speedMax, targeter: targeterOpts } = {}) {
+  const targeter = createTargeter(targeterOpts);
   const dwell = createDwell();
   const gate = createGate({ lockMs, speedMax });
   let lastAt = -Infinity; let lockedEl = null;
   const cooling = (now) => now - lastAt < refractoryMs();
   return {
     targeter, dwell, gate, cooling,
+    coolLeft: (now) => Math.max(0, refractoryMs() - (now - lastAt)),
     // One frame. `hit` (optional) replaces snapping, `quiet` blocks targeting.
     frame(point, rects, now, { hit, quiet } = {}) {
       gate.move(point, now);
