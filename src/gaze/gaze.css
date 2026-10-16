@@ -33,8 +33,10 @@
 @keyframes calib-pulse { 50% { transform: scale(.75); } }
 #gaze-ui > #gaze-recal { background: #4fc3f7; color: #0f1115; }
 
-video.gaze-head-preview { position: fixed; right: 8px; bottom: 8px; width: 160px; height: 120px;
+video.gaze-head-preview, canvas.gaze-hand-skeleton { position: fixed; right: 8px; bottom: 8px; width: 160px; height: 120px;
   opacity: .6; transform: scaleX(-1); border-radius: 8px; z-index: 900; pointer-events: none; object-fit: cover; }
+canvas.gaze-hand-skeleton { z-index: 901; opacity: .9; }
+#gaze-gain { width: 70px; vertical-align: middle; }
 
 
 .calib-cmp { margin-top: 8px; font-size: .95rem; opacity: .7; }
@@ -48,5 +50,5 @@ video.gaze-head-preview { position: fixed; right: 8px; bottom: 8px; width: 160px
 #caregiver-qr[hidden] { display: none; }
 
 /* Shift+H: clean projector view */
-body.gaze-clean #gaze-ui, body.gaze-clean #gaze-stats, body.gaze-clean video.gaze-head-preview,
+body.gaze-clean #gaze-ui, body.gaze-clean #gaze-stats, body.gaze-clean video.gaze-head-preview, body.gaze-clean canvas.gaze-hand-skeleton,
 body.gaze-clean #webgazerVideoContainer, body.gaze-clean #gaze-raw { display: none !important; }

@@ -50,3 +50,8 @@ and the browser Web Speech API.
 - No `?mode` starts head mode; if the camera is denied it falls back to mouse and says so in the status line.
 - Caregiver keys: **Shift+R** demo reset (stats, fatigue, live-learned samples; calibration kept), **Shift+C** recalibrate, **Shift+H** hide the camera preview, HUD and stats for a clean projector view.
 - Run `npm run fetch-models` once (needs internet) to copy the MediaPipe/WebGazer wasm and download `face_landmarker.task` into `public/models/` (~60 MB, gitignored). The app loads these first and falls back to the CDN.
+
+### Head sensitivity and hand mode
+
+- Camera modes (head, iris, eyes) have a sensitivity slider in the HUD (0.5–2.0, saved), also **Shift+]** / **Shift+[**. Lower = a bigger movement per screen distance. Head calibration now says to point with the nose and redoes a dot if the head barely moved.
+- `?mode=hand`: for users who can move a hand but not speak. The index fingertip is the pointer (central 60% of the camera frame maps to the whole screen); pinching thumb and index selects instantly. No calibration. Hand tracking uses MediaPipe HandLandmarker (Apache-2.0, `@mediapipe/tasks-vision`).

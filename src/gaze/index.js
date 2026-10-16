@@ -31,7 +31,7 @@ export function startGaze({ mode = 'mouse', root }) {
   const params = new URLSearchParams(location.search);
   const sw = document.createElement('select');
   sw.id = 'gaze-mode';
-  for (const m of ['mouse', 'eyes', 'iris', 'head']) sw.add(new Option(m, m, false, m === mode));
+  for (const m of ['mouse', 'eyes', 'iris', 'head', 'hand']) sw.add(new Option(m, m, false, m === mode));
   sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
   ui.appendChild(sw);
 
@@ -75,8 +75,33 @@ export function startGaze({ mode = 'mouse', root }) {
   const setPoint = (x, y) => { point = { x, y }; };
   const smoother = createPointSmoother(PRESETS[mode] || PRESETS.head);
   // raw tracker samples go through One Euro + dead zone; (-1,-1) means "no face"
+  // sensitivity (0.5-2.0) scales the pointer's distance from the screen centre, so lower = a
+  // bigger head/eye movement per screen distance. Persisted. Not applied to mouse or hand.
+  let gain = Math.min(2, Math.max(0.5, Number(localStorage.getItem('gaze-gain')) || 1));
+  const gainOn = mode === 'head' || mode === 'iris' || mode === 'eyes';
+  const gainBox = document.createElement('label');
+  gainBox.id = 'gaze-gain-label';
+  const gainSlider = document.createElement('input');
+  gainSlider.type = 'range'; gainSlider.id = 'gaze-gain'; gainSlider.min = '0.5'; gainSlider.max = '2'; gainSlider.step = '0.05';
+  gainSlider.value = String(gain);
+  const gainText = document.createElement('span');
+  const setGain = (g) => {
+    gain = Math.min(2, Math.max(0.5, Math.round(g * 20) / 20));
+    gainSlider.value = String(gain);
+    gainText.textContent = ` sens ${gain.toFixed(2)}`;
+    localStorage.setItem('gaze-gain', String(gain));
+  };
+  gainSlider.oninput = () => setGain(Number(gainSlider.value));
+  gainBox.append(gainSlider, gainText);
+  setGain(gain);
+  if (gainOn) ui.appendChild(gainBox);
   const setRaw = (x, y) => {
     if (x < 0) { smoother.reset(); setPoint(-1, -1); return; }
+    if (gainOn && gain !== 1) {
+      const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
+      x = Math.min(window.innerWidth, Math.max(0, cx + (x - cx) * gain));
+      y = Math.min(window.innerHeight, Math.max(0, cy + (y - cy) * gain));
+    }
     const p = smoother.filter(x, y, performance.now());
     setPoint(p.x, p.y);
   };
@@ -99,23 +124,26 @@ export function startGaze({ mode = 'mouse', root }) {
     }, 33);
   }
 
-  if (mode === 'eyes' || mode === 'head' || mode === 'iris') {
+  if (mode === 'eyes' || mode === 'head' || mode === 'iris' || mode === 'hand') {
     showStatus('starting camera…');
     // dynamic imports keep the TensorFlow / MediaPipe bundles out of mouse mode
     const load = mode === 'eyes'
       ? import('./eyes.js').then((m) => m.createEyesTracker)
       : mode === 'iris'
         ? import('./iris.js').then((m) => m.createIrisTracker)
-        : import('./head.js').then((m) => m.createHeadTracker);
+        : mode === 'hand'
+          ? import('./hand.js').then((m) => m.createHandTracker)
+          : import('./head.js').then((m) => m.createHeadTracker);
     const calibOpts = mode === 'eyes' ? {} : { clicksPerDot: 3 };
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
+        onPinch: () => { const el = dwell.el; if (el) { dwell.select(); selectNow(el); } }, // hand mode: pinch = instant select
         onBlink: (l, r, t) => { fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
-          if (s === 'face lost') setRaw(-1, -1);
+          if (/ lost$/.test(s)) setRaw(-1, -1);
         },
       });
       return tracker.start().then(() => {
@@ -124,6 +152,7 @@ export function startGaze({ mode = 'mouse', root }) {
         window.__gazeReadyMs = ready;
         resetLearning = tracker.resetLearning ? tracker.resetLearning.bind(tracker) : null;
         learner = tracker.learn ? tracker.learn.bind(tracker) : null;
+        if (mode === 'hand') return null; // hand mode needs no calibration
         const recal = document.createElement('button');
         recal.id = 'gaze-recal';
         recal.textContent = 'Recalibrate';
@@ -155,6 +184,10 @@ export function startGaze({ mode = 'mouse', root }) {
   window.addEventListener('keydown', (e) => {
     if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.key === '{' || e.key === '}' || e.code === 'BracketLeft' || e.code === 'BracketRight') {
+      if (gainOn) { setGain(gain + (e.code === 'BracketRight' || e.key === '}' ? 0.1 : -0.1)); showStatus(`sensitivity ${gain.toFixed(2)}`, 'ok'); e.preventDefault(); }
+      return;
+    }
     const k = e.key.toLowerCase();
     if (k === 'r') {
       stats.reset(); fatigue.reset(); if (resetLearning) resetLearning();

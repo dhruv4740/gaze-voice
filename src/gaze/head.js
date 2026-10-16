@@ -122,6 +122,14 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
   }
 
   // Calibration click: pair the recent feature vectors with the dot's screen position.
+  // calibration helpers: how many pairs so far, their mean feature, and a way to drop a bad dot
+  const count = () => pairs.length;
+  const meanSince = (from) => {
+    const w = pairs.slice(from);
+    return w.length ? w[0].f.map((_, i) => w.reduce((s, q) => s + q.f[i], 0) / w.length) : null;
+  };
+  const trim = (to) => { pairs.length = to; };
+
   function record(x, y) {
     for (const f of recent) pairs.push({ f, x, y });
   }
@@ -159,7 +167,7 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     landmarker?.close();
   }
 
-  return { start, stop, record, reset, resetLearning, fit, learn };
+  return { start, stop, record, reset, resetLearning, fit, learn, count, meanSince, trim };
 }
 
 // Head pointer: nose tip (mirrored so turning right moves right) -> screen by an affine map.
