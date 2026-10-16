@@ -8,6 +8,7 @@ import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
 import { createRest } from './rest.js';
 import { createXray } from './xray.js';
+import { createNight } from './night.js';
 import { createScanner, DEFAULT_STEP_MS } from './scan.js';
 import { pickInput, savedInput } from './picker.js';
 import { parseMode, parseSelect } from './inputs.js';
@@ -52,7 +53,12 @@ function run(modeStr, root, selectStr) {
     get lastSelectSource() { return lastSelect; },
     get active() { return mouseActive ? 'mouse' : handLead() ? 'hand' : point.x >= 0 ? (camId || 'mouse') : 'none'; },
     get point() { return { ...point }; },
+    get lum() { return night ? night.lum : null; },
+    get night() { return night ? night.on : false; },
+    get nightScan() { return night ? night.scanning : false; },
+    setLum(v) { night?.setLum(v); },
   };
+  let night = null;
   const cursor = document.createElement('div');
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
@@ -111,6 +117,7 @@ function run(modeStr, root, selectStr) {
   xrayBtn.textContent = 'X-ray';
   xrayBtn.onclick = () => xray.toggle();
   ui.appendChild(xrayBtn);
+  night = createNight({ root, lost: () => point.x < 0, select: (el) => selectNow(el, 'scan'), status: showStatus, forceDark: params.get('dark') === '1' });
 
   // per-patient timing: dwell time (per input mode) and the pause after every selection
   const lsNum = (k, d) => Number(localStorage.getItem(k)) || d;
@@ -473,6 +480,7 @@ function run(modeStr, root, selectStr) {
     cursor.style.top = `${shown.y}px`;
     rawDot.style.left = `${point.x}px`;
     rawDot.style.top = `${point.y}px`;
+    night.tick(now);
     xray.frame(now, () => {
       const rect = target && (rects.find((q) => q.el === target) || target.getBoundingClientRect());
       const dbg = trackerDebug ? trackerDebug() : null;

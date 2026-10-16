@@ -21,6 +21,9 @@ camera -> MediaPipe landmarks -> features -> per-user regression
 8. **Refractory.** After any selection nothing else is selected for 1.5 s (adjustable), so a held gaze cannot repeat. Emergency and Wake are exempt.
 9. **Contract events.** `gaze-select` on the tile, plus `aac:*` events between the gaze half and the conversation half (`docs/CONTRACT.md`).
 
+## Night mode
+A dark room breaks webcam tracking. `src/gaze/night.js` reads the mean luminance of a 32x24 copy of the camera frame about once a second (`window.__gazeDebug.lum`; `?dark=1` fakes a dark room for tests). Below 40/255 for 3 s (or tracking lost while dark) a banner offers Night mode and accepts itself after 5 s; Shift+N or the HUD Night button toggles it. Night mode draws a thick warm-white border so the screen lights the face and says so when the frame is bright enough (above 70). If tracking is still lost 8 s later it falls back to single-switch scanning (Space, any key or click) over the tiles, Emergency first, with "Too dark to track: tap any button to choose"; it returns when light or tracking returns. Thresholds are untested on a real camera.
+
 ## Live learning
 Every confirmed selection is a free calibration sample: the median of the raw features from the 400 ms before it, paired with the tile centre. The model refits every 3 samples (cap 150, weighted 3x vs the original calibration), so accuracy improves while the patient just uses the app. Shift+R resets the learned samples.
 

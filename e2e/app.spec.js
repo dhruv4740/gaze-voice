@@ -272,3 +272,35 @@ test('11. Stop tile turns into Listen and back', async ({ page }) => {
   await page.evaluate(() => document.querySelector('[data-action="audio-listen"]').click());
   await expect(page.locator('[data-action="audio-stop"]')).toHaveCount(1);
 });
+
+test('12. ?dark=1: lum exposed, banner auto-accepts, border shows, Shift+N toggles', async ({ page }) => {
+  await prep(page);
+  await page.goto('/?mode=mouse&dark=1');
+  await page.waitForSelector('#slot-agree');
+  await expect.poll(() => page.evaluate(() => window.__gazeDebug.lum), { timeout: 3000 }).toBe(10);
+  await expect(page.locator('#gaze-night-banner')).toBeVisible({ timeout: 6000 });
+  await expect(page.locator('#gaze-night-frame')).toBeVisible({ timeout: 8000 }); // auto-accept after 5 s
+  expect(await page.evaluate(() => window.__gazeDebug.night)).toBe(true);
+  await page.locator('#slot-agree').scrollIntoViewIfNeeded();
+  expect((await page.locator('#slot-agree').boundingBox()).x).toBeGreaterThan(44);
+  await page.keyboard.press('Shift+N');
+  await expect(page.locator('#gaze-night-frame')).toBeHidden();
+  await page.keyboard.press('Shift+N');
+  await expect(page.locator('#gaze-night-frame')).toBeVisible();
+});
+
+test('13. night mode, tracking lost 8 s -> scan fallback, emergency first; light returns -> back', async ({ page }) => {
+  await prep(page);
+  await page.goto('/?mode=mouse&dark=1');
+  await page.waitForSelector('#slot-agree');
+  await page.keyboard.press('Shift+N');
+  await expect(page.locator('#gaze-night-hint')).toBeVisible({ timeout: 14000 });
+  await expect(page.locator('#gaze-night-hint')).toHaveText(/Too dark to track/);
+  expect(await page.evaluate(() => window.__gazeDebug.nightScan)).toBe(true);
+  const first = page.locator('.gaze-night-lit');
+  await expect(first).toHaveAttribute('data-action', 'emergency');
+  await page.keyboard.press('Space');
+  await expect.poll(() => ev(page, 'emergency')).toBeGreaterThan(0);
+  await page.evaluate(() => window.__gazeDebug.setLum(150));
+  await expect(page.locator('#gaze-night-hint')).toBeHidden({ timeout: 3000 });
+});
