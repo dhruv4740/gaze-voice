@@ -25,7 +25,7 @@ More: [docs/PLAN.md](docs/PLAN.md) · [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.m
 ## Credits
 All code was written during the event on 16 Oct 2026, with AI coding assistants
 (Claude by Anthropic). Libraries and APIs used: [Vite](https://vite.dev) (MIT),
-[WebGazer.js](https://webgazer.cs.brown.edu) (GPLv3),
+[WebGazer.js](https://webgazer.cs.brown.edu) (GPLv3, with MediaPipe Face Mesh, Apache-2.0),
 [MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe) (Apache-2.0),
 [Groq API](https://groq.com) with openai/gpt-oss-20b, Google Gemini API (fallback),
 and the browser Web Speech API.

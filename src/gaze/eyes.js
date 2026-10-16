@@ -4,6 +4,7 @@
 import webgazer from 'webgazer';
 
 const LOST_AFTER_MS = 800;
+const MODEL_TIMEOUT_MS = 180000;
 const FACE_MESH_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619';
 
 export function createEyesTracker({ onPoint, onStatus, preview = true }) {
@@ -42,6 +43,18 @@ export function createEyesTracker({ onPoint, onStatus, preview = true }) {
     webgazer.showVideoPreview(preview);
     const container = document.getElementById('webgazerVideoContainer');
     if (container) container.classList.add('gaze-preview');
+    // begin() resolves before the face-mesh detector has loaded (the first load downloads ~10 MB
+    // of wasm); calibration clicks recorded before a face is seen would train on nothing.
+    setStatus('loading eye model…');
+    const waitStart = performance.now();
+    const tracker = webgazer.getTracker();
+    while (!(tracker && tracker.positionsArray)) {
+      if (performance.now() - waitStart > MODEL_TIMEOUT_MS) {
+        webgazer.end(); started = false;
+        throw new Error('Eye model did not load (offline? face not visible?)');
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
     lastSeen = performance.now();
     lostTimer = setInterval(() => {
       if (performance.now() - lastSeen > LOST_AFTER_MS) setStatus('face lost');
