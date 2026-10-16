@@ -1,8 +1,12 @@
-// 3x3 click calibration + 3 s accuracy check. WebGazer learns from each click at the
-// dot's centre while the user looks at it.
+// Hands-free calibration: each dot records automatically while the user looks at it
+// (settle, then sample), then advances. Clicking a dot is a caregiver shortcut that records
+// immediately. Ends with a 3 s accuracy check.
 const CLICKS_PER_DOT = 5;
 const CHECK_MS = 3000;
 const SETTLE_MS = 500;
+const DOT_SETTLE_MS = 600; // let the eyes land on a new dot before sampling
+const DOT_SAMPLE_MS = 1200;
+const SAMPLE_EVERY_MS = 200;
 const MARGIN = 0.08;
 const AXIS = [MARGIN, 0.5, 1 - MARGIN];
 
@@ -32,23 +36,41 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
 
     let i = 0;
     let clicks = 0;
+    let timers = [];
+    const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
+    const dotCenter = () => {
+      const r = dot.getBoundingClientRect();
+      return [r.left + r.width / 2, r.top + r.height / 2];
+    };
 
     function showDot() {
+      clearTimers();
+      clicks = 0;
       place(points[i]);
-      dot.textContent = clicksPerDot - clicks;
-      msg.textContent = `Look at the dot and click it (${i + 1}/${points.length})`;
+      dot.textContent = '';
+      msg.textContent = `Look at the dot (${i + 1}/${points.length}). A helper can also click it.`;
+      // restart the shrinking-ring animation that shows the dot is being read
+      dot.style.setProperty('--ring-ms', `${DOT_SETTLE_MS + DOT_SAMPLE_MS}ms`);
+      dot.classList.remove('calib-auto'); void dot.offsetWidth; dot.classList.add('calib-auto');
+      for (let t = DOT_SETTLE_MS; t < DOT_SETTLE_MS + DOT_SAMPLE_MS; t += SAMPLE_EVERY_MS) {
+        timers.push(setTimeout(() => tracker.record(...dotCenter()), t));
+      }
+      timers.push(setTimeout(next, DOT_SETTLE_MS + DOT_SAMPLE_MS));
+    }
+
+    function next() {
+      clearTimers();
+      if (++i < points.length) showDot(); else accuracyCheck();
     }
 
     dot.addEventListener('click', () => {
-      const r = dot.getBoundingClientRect();
-      tracker.record(r.left + r.width / 2, r.top + r.height / 2);
+      tracker.record(...dotCenter());
       dot.classList.remove('calib-pulse'); void dot.offsetWidth; dot.classList.add('calib-pulse');
-      if (++clicks < clicksPerDot) { dot.textContent = clicksPerDot - clicks; return; }
-      clicks = 0;
-      if (++i < points.length) showDot(); else accuracyCheck();
+      if (++clicks >= clicksPerDot) next();
     });
 
     function accuracyCheck() {
+      clearTimers();
       tracker.fit?.();
       dot.disabled = true;
       dot.textContent = '';
@@ -95,7 +117,7 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
         cmp.textContent = Object.entries(all).map(([k, e]) => `${k}: ${e}px`).join(' | ');
       }
       msg.append(h, v, cmp, again, done);
-      again.onclick = async () => { await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot, label })); };
+      again.onclick = async () => { clearTimers(); await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot, label })); };
       done.onclick = () => { overlay.remove(); resolve({ meanError }); };
     }
 

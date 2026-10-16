@@ -2,6 +2,8 @@
 // Modes: mouse (placeholder), eyes (WebGazer). Contract: docs/CONTRACT.md.
 import './gaze.css';
 import { createPointSmoother } from './smoothing.js';
+import { createBlinkDetector } from './blink.js';
+import { createStats } from './stats.js';
 
 const DEFAULT_DWELL_MS = 1200;
 
@@ -10,9 +12,13 @@ export function startGaze({ mode = 'mouse', root }) {
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
 
+  // corner control stack: status, mode switcher, recalibrate, blink toggle, stats toggle
+  const ui = document.createElement('div');
+  ui.id = 'gaze-ui';
+  root.appendChild(ui);
   const statusEl = document.createElement('div');
   statusEl.id = 'gaze-status';
-  root.appendChild(statusEl);
+  ui.appendChild(statusEl);
   const showStatus = (text, cls = '') => { statusEl.textContent = text; statusEl.className = cls; };
 
   const params = new URLSearchParams(location.search);
@@ -20,7 +26,34 @@ export function startGaze({ mode = 'mouse', root }) {
   sw.id = 'gaze-mode';
   for (const m of ['mouse', 'eyes', 'iris', 'head']) sw.add(new Option(m, m, false, m === mode));
   sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
-  root.appendChild(sw);
+  ui.appendChild(sw);
+
+  const stats = createStats({ root });
+  const statsBtn = document.createElement('button');
+  statsBtn.textContent = 'Stats';
+  statsBtn.onclick = () => stats.toggle();
+  ui.appendChild(statsBtn);
+
+  // blink-to-select needs face blendshapes: head and iris modes only
+  const blinkLabel = document.createElement('label');
+  blinkLabel.id = 'gaze-blink';
+  const blinkBox = document.createElement('input');
+  blinkBox.type = 'checkbox';
+  blinkBox.checked = localStorage.getItem('gaze-blink') !== '0';
+  blinkBox.onchange = () => localStorage.setItem('gaze-blink', blinkBox.checked ? '1' : '0');
+  blinkLabel.append(blinkBox, ' blink select');
+  if (mode === 'head' || mode === 'iris') ui.appendChild(blinkLabel);
+  let blinkTarget = null; // what was hovered when the eyes closed
+  const blink = createBlinkDetector({
+    onChange: (closed) => {
+      cursor.classList.toggle('closed', closed);
+      if (closed) blinkTarget = current;
+    },
+    onLongBlink: () => {
+      const el = blinkTarget || current;
+      if (el && el.isConnected && blinkBox.checked) selectNow(el);
+    },
+  });
 
   let point = { x: -1, y: -1 };
   let calibrating = false;
@@ -49,6 +82,7 @@ export function startGaze({ mode = 'mouse', root }) {
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
+        onBlink: (l, r, t) => { if (blinkBox.checked) blink.update(l, r, t); },
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
@@ -59,7 +93,7 @@ export function startGaze({ mode = 'mouse', root }) {
         const recal = document.createElement('button');
         recal.id = 'gaze-recal';
         recal.textContent = 'Recalibrate';
-        root.appendChild(recal);
+        ui.appendChild(recal);
         const calibrate = async () => {
           calibrating = true;
           const { runCalibration, HEAD_POINTS } = await import('./calibration.js');
@@ -85,6 +119,14 @@ export function startGaze({ mode = 'mouse', root }) {
   let current = null;
   let dwellStart = 0;
 
+  // Fire the contract's selection on el. The user must look away and back to select again.
+  function selectNow(el) {
+    el.dispatchEvent(new CustomEvent('gaze-select', { bubbles: true }));
+    el.classList.remove('gaze-hover');
+    el.style.setProperty('--dwell', 0);
+    if (current === el) current = null;
+  }
+
   function tick(now) {
     cursor.style.left = `${point.x}px`;
     cursor.style.top = `${point.y}px`;
@@ -103,10 +145,7 @@ export function startGaze({ mode = 'mouse', root }) {
       const progress = Math.min((now - dwellStart) / dwellMs, 1);
       current.style.setProperty('--dwell', progress);
       if (progress >= 1) {
-        current.dispatchEvent(new CustomEvent('gaze-select', { bubbles: true }));
-        current.classList.remove('gaze-hover');
-        current.style.setProperty('--dwell', 0);
-        current = null; // must look away and back to select again
+        selectNow(current);
       }
     }
     requestAnimationFrame(tick);

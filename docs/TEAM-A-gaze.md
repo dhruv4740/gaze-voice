@@ -10,3 +10,8 @@ Own only `src/gaze/**`, README.md, this file. Contract: [CONTRACT.md](CONTRACT.m
 - [x] 6. Stretch: own iris regression model, compare vs WebGazer, `?mode=iris`
 
 Rules: camera frames never leave the browser; credit libraries in the README Credits section; small commits.
+
+## Round 2 (feat/gaze-handsfree)
+- [x] Hands-free calibration: dots auto-record (600 ms settle, 1.2 s sample) and advance; click is a caregiver shortcut
+- [x] Blink-to-select (head/iris): both eyes closed > 400 ms selects the hovered target; toggle in corner UI
+- [x] Stats overlay (Stats button): selections, mean time-to-select, words/min via gaze
