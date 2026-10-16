@@ -1,13 +1,13 @@
 // Team B (teammate) owns everything in src/conversation/.
 // Implements the complete AAC conversation interface: layout, speech recognition,
 // Groq & Gemini replies, speech synthesis, categories, patient profile, spell mode, emergency.
-// Round 3: Judge demo mode, live speed proof, new patient onboarding, accessibility polish,
-// click double-fire prevention, speech debouncing, contract events.
+// Priority Round: Turn-based conversation rhythm (aac:heard, gaze:rest), speech pause during TTS,
+// full QWERTY keyboard screen, stop/listen audio tile, deduplication.
 
 import './conversation.css';
 import { getMemory, saveMemory, logInteraction, getDailyLog } from './memory.js';
 import { CATEGORIES, getOfflineReplies } from './categories.js';
-import { predictReplies } from './groq.js';
+import { predictReplies, predictWordCompletions } from './groq.js';
 import { SpeechListener, speakPhrase } from './speech.js';
 import { SpellEngine, LETTER_GROUPS } from './spell.js';
 import { startEmergencyAlarm, stopEmergencyAlarm } from './emergency.js';
@@ -19,7 +19,7 @@ export function startConversation(app) {
   let memory = getMemory();
   let patientLang = 'en-IN'; // patient's input language
   let listenerLang = 'en-IN'; // caregiver / listener language ('en-IN' | 'hi-IN' | 'mr-IN')
-  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'profile' | 'topics' | 'topic_items' | 'summary' | 'onboarding'
+  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'type' | 'profile' | 'topics' | 'topic_items' | 'summary' | 'onboarding'
   let activeCategory = null;
   let activeTopic = null;
   let isEmergency = false;
@@ -31,6 +31,16 @@ export function startConversation(app) {
   let showManualInput = false;
   let fatigueAlert = null; // 'mild' | 'high' | null
   let lastTranslation = null; // { original, translated, lang }
+
+  // Rest state & Audio state (Turn-based rhythm)
+  let isResting = false;
+  let isAudioStopped = false;
+  let lastUtteranceNormalized = '';
+
+  // Type / QWERTY Keyboard State
+  let typeBuffer = '';
+  let typePredictions = ['I need', 'Thank you', 'Please help', 'Water', 'Yes', 'No'];
+  let typePredictionTimer = null;
 
   // Accessibility & Judge Demo Proof State
   let isJudgeMode = true; // Enabled for judging demo
@@ -57,6 +67,11 @@ export function startConversation(app) {
   const spellEngine = new SpellEngine({
     onBufferChange: () => render(),
     onPredictionsChange: () => render()
+  });
+
+  // Listen for rest state from Team A's rest mode
+  window.addEventListener('gaze:rest', (e) => {
+    isResting = !!e.detail?.resting;
   });
 
   // Listen for fatigue events from Team A's gaze engine
@@ -93,6 +108,24 @@ export function startConversation(app) {
   async function handleNewUtterance(text) {
     if (!text || !text.trim()) return;
 
+    // Filter fragments under 3 words unless ending in '?'
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const isQuestion = text.trim().endsWith('?');
+    if (words.length < 3 && !isQuestion) {
+      return;
+    }
+
+    // Dedupe identical or near-identical text
+    const normalized = text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    if (normalized === lastUtteranceNormalized) {
+      return;
+    }
+    lastUtteranceNormalized = normalized;
+
+    // Contract event: aac:heard wakes the app!
+    window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text } }));
+    isResting = false;
+
     // 1. Instant feel: immediately display offline contextual replies (0ms delay)
     replies = getOfflineReplies(text, patientLang);
     isLoadingReplies = true;
@@ -110,7 +143,7 @@ export function startConversation(app) {
         profile: memory,
         language: patientLang
       });
-      if (Array.isArray(aiReplies) && aiReplies.length > 0) {
+      if (Array.isArray(aiReplies) && aiReplies.length > 0 && !isResting) {
         replies = aiReplies;
       }
     } catch (err) {
@@ -152,8 +185,11 @@ export function startConversation(app) {
       lastTranslation = null;
     }
 
-    // 2. Text-to-speech output
-    speakPhrase(textToSpeak, listenerLang);
+    // 2. Text-to-speech output (pausing speech recognition while speaking to prevent self-hearing)
+    speakPhrase(textToSpeak, listenerLang, {
+      onStart: () => listener.pauseForSpeech(),
+      onEnd: () => listener.resumeAfterSpeech(500)
+    });
 
     // 3. Contract event: aac:spoken dispatched on window for caregiver companion
     window.dispatchEvent(
@@ -179,8 +215,7 @@ export function startConversation(app) {
     if (mode !== 'chat') {
       mode = 'chat';
     }
-    // Update replies contextually for patient's spoken turn
-    replies = getOfflineReplies(phraseText, patientLang);
+    // Turn-based rhythm: After a reply is spoken, keep the reply tiles as they are until the next aac:heard (no auto-refresh)
     render();
   }
 
@@ -246,6 +281,29 @@ export function startConversation(app) {
     }
   }
 
+  function fetchTypePredictions(buffer) {
+    if (typePredictionTimer) clearTimeout(typePredictionTimer);
+    typePredictionTimer = setTimeout(async () => {
+      const trimmed = (buffer || '').trim();
+      if (!trimmed) {
+        typePredictions = ['I need', 'Thank you', 'Please help', 'Water', 'Yes', 'No'];
+        render();
+        return;
+      }
+      const words = trimmed.split(/\s+/);
+      const lastWord = words[words.length - 1] || '';
+      try {
+        const preds = await predictWordCompletions(lastWord, trimmed);
+        if (Array.isArray(preds) && preds.length > 0) {
+          typePredictions = preds.slice(0, 5);
+          render();
+        }
+      } catch (e) {
+        // ignore
+      }
+    }, 200);
+  }
+
   // Unified action handler with click double-fire prevention
   function handleAction(target) {
     const action = target.dataset.action;
@@ -277,9 +335,54 @@ export function startConversation(app) {
     } else if (action === 'nav-categories') {
       mode = 'categories';
       render();
-    } else if (action === 'nav-spell') {
-      mode = 'spell';
-      spellEngine.clear();
+    } else if (action === 'nav-type' || action === 'nav-spell') {
+      mode = 'type';
+      fetchTypePredictions(typeBuffer);
+      render();
+    } else if (action === 'type-key') {
+      typeBuffer += value;
+      fetchTypePredictions(typeBuffer);
+      render();
+    } else if (action === 'type-space') {
+      typeBuffer += ' ';
+      fetchTypePredictions(typeBuffer);
+      render();
+    } else if (action === 'type-backspace') {
+      typeBuffer = typeBuffer.slice(0, -1);
+      fetchTypePredictions(typeBuffer);
+      render();
+    } else if (action === 'type-clear') {
+      typeBuffer = '';
+      typePredictions = ['I need', 'Thank you', 'Please help', 'Water', 'Yes', 'No'];
+      render();
+    } else if (action === 'type-prediction') {
+      const words = typeBuffer.trimEnd().split(' ');
+      if (words.length > 0 && words[words.length - 1].length > 0 && !typeBuffer.endsWith(' ')) {
+        words[words.length - 1] = value;
+        typeBuffer = words.join(' ') + ' ';
+      } else {
+        typeBuffer = (typeBuffer ? typeBuffer.trimEnd() + ' ' : '') + value + ' ';
+      }
+      fetchTypePredictions(typeBuffer);
+      render();
+    } else if (action === 'type-speak') {
+      if (typeBuffer.trim()) {
+        const text = typeBuffer.trim();
+        typeBuffer = '';
+        typePredictions = ['I need', 'Thank you', 'Please help', 'Water', 'Yes', 'No'];
+        handleSelectPhrase(text, 'type', 'keyboard');
+      }
+    } else if (action === 'type-whatsapp') {
+      const text = typeBuffer.trim() || 'Hello, I am sending this message via Gaze Voice.';
+      window.open(getWhatsAppShareUrl(text), '_blank');
+    } else if (action === 'audio-stop') {
+      window.speechSynthesis.cancel();
+      listener.stop();
+      isAudioStopped = true;
+      render();
+    } else if (action === 'audio-listen') {
+      isAudioStopped = false;
+      listener.start();
       render();
     } else if (action === 'nav-back') {
       if (mode === 'category_items') {
@@ -323,6 +426,8 @@ export function startConversation(app) {
       toggleListenerLanguage();
     } else if (action === 'toggle-mic') {
       listener.toggle();
+      isAudioStopped = !listener.isListening;
+      render();
     } else if (action === 'toggle-demo') {
       isJudgeMode = !isJudgeMode;
       render();
@@ -681,43 +786,61 @@ export function startConversation(app) {
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-type">
+          <span class="conv-tile-tag">Keyboard</span>
+          <span class="conv-tile-text">⌨️ ${isHi ? 'लिखें' : 'Type'}</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
         <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-categories">
           <span class="conv-tile-tag">AAC Library</span>
           <span class="conv-tile-text">📂 ${isHi ? 'श्रेणियाँ' : 'Categories'}</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-spell">
-          <span class="conv-tile-tag">Keyboard</span>
-          <span class="conv-tile-text">🔤 ${isHi ? 'लिखें' : 'Spell'}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
+        ${
+          isAudioStopped
+            ? `
+          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-listen" style="border-color:#00e676; background:rgba(0,230,118,0.12);">
+            <span class="conv-tile-tag">Audio</span>
+            <span class="conv-tile-text">▶️ Listen</span>
+            <div class="conv-tile-dwell-ring"></div>
+          </button>
+        `
+            : `
+          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-stop" style="border-color:#ff9800; background:rgba(255,152,0,0.12);">
+            <span class="conv-tile-tag">Audio</span>
+            <span class="conv-tile-text">⏹️ Stop</span>
+            <div class="conv-tile-dwell-ring"></div>
+          </button>
+        `
+        }
       `;
-    } else if (mode === 'spell') {
+    } else if (mode === 'type' || mode === 'spell') {
       navTilesHtml = `
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-speak" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.15);">
-          <span class="conv-tile-tag">Action</span>
-          <span class="conv-tile-text">🔊 Speak Out</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-space">
-          <span class="conv-tile-tag">Letter</span>
-          <span class="conv-tile-text">␣ Space</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-backspace">
-          <span class="conv-tile-tag">Edit</span>
-          <span class="conv-tile-text">⌫ Backspace</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
         <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
           <span class="conv-tile-tag">Return</span>
           <span class="conv-tile-text">💬 Back to Chat</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
+
+        ${
+          isAudioStopped
+            ? `
+          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-listen" style="border-color:#00e676; background:rgba(0,230,118,0.12);">
+            <span class="conv-tile-tag">Audio</span>
+            <span class="conv-tile-text">▶️ Listen</span>
+            <div class="conv-tile-dwell-ring"></div>
+          </button>
+        `
+            : `
+          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-stop" style="border-color:#ff9800; background:rgba(255,152,0,0.12);">
+            <span class="conv-tile-tag">Audio</span>
+            <span class="conv-tile-text">⏹️ Stop</span>
+            <div class="conv-tile-dwell-ring"></div>
+          </button>
+        `
+        }
       `;
     } else {
       // Topics, Categories, and sub-menus
@@ -736,7 +859,7 @@ export function startConversation(app) {
           ${navTilesHtml}
         </nav>
         <div class="conv-emergency-container">
-          <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-dwell="2000" data-action="emergency">
+          <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-always="1" data-gaze-dwell="2000" data-action="emergency">
             <span class="conv-tile-tag">Hold 2s</span>
             <span class="conv-tile-text">🚨 EMERGENCY</span>
             <div class="conv-tile-dwell-ring"></div>
@@ -839,84 +962,89 @@ export function startConversation(app) {
           ).join('')}
         </div>
       `;
-    } else if (mode === 'spell') {
-      // Spell Mode Keyboard - All large gaze targets with data-gaze-target
-      const activeGrp = spellEngine.activeGroup;
-      const predictions = spellEngine.predictions || [];
-
+    } else if (mode === 'type' || mode === 'spell') {
       mainContentHtml = `
-        <div class="conv-spell-container">
-          <div class="conv-spell-bar">
-            <div class="conv-spell-buffer">
-              ${escapeHtml(spellEngine.buffer)}<span class="conv-spell-cursor"></span>
+        <div class="conv-keyboard-container">
+          <div class="conv-type-bar">
+            <div class="conv-type-buffer">
+              ${typeBuffer ? escapeHtml(typeBuffer) : '<span style="opacity:0.4; font-weight:500;">Type by glancing at letters...</span>'}<span class="conv-spell-cursor"></span>
             </div>
-            <div style="font-size:0.9rem; color:var(--conv-text-muted);">
-              Glance letters to spell &bull; Space / Backspace in sidebar
+            <div style="font-size:0.9rem; color:var(--conv-text-muted); padding-left:12px;">
+              ${typeBuffer.length} chars
             </div>
           </div>
 
-          ${
-            predictions.length > 0
-              ? `
-            <div class="conv-predictions-row">
-              ${predictions
-                .map(
-                  (word) => `
-                <button class="conv-tile conv-prediction-tile" data-gaze-target data-action="spell-prediction" data-value="${escapeHtml(word)}">
-                  <span class="conv-tile-text">✨ ${escapeHtml(word)}</span>
+          <div class="conv-type-predictions">
+            ${typePredictions.slice(0, 5).map(
+              (word) => `
+              <button class="conv-tile conv-pred-tile" data-gaze-target data-action="type-prediction" data-value="${escapeHtml(word)}">
+                <span class="conv-tile-text">✨ ${escapeHtml(word)}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `
+            ).join('')}
+          </div>
+
+          <div class="conv-qwerty-grid">
+            <!-- Row 1: Q W E R T Y U I O P -->
+            <div class="conv-qwerty-row">
+              ${['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'].map(
+                (k) => `
+                <button class="conv-tile conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
+                  <span class="conv-tile-text">${k}</span>
                   <div class="conv-tile-dwell-ring"></div>
                 </button>
               `
-                )
-                .join('')}
+              ).join('')}
             </div>
-          `
-              : ''
-          }
 
-          <div class="conv-grid-container">
-            ${
-              activeGrp
-                ? activeGrp.letters
-                    .map(
-                      (char) => `
-                  <button class="conv-tile" data-gaze-target data-action="spell-letter" data-value="${char}">
-                    <span class="conv-tile-text" style="font-size:2.8rem; font-weight:700;">${char}</span>
-                    <div class="conv-tile-dwell-ring"></div>
-                  </button>
-                `
-                    )
-                    .concat(`
-                  <button class="conv-tile" data-gaze-target data-action="spell-group" data-value="">
-                    <span class="conv-tile-tag">Keyboard</span>
-                    <span class="conv-tile-text">⬅️ Groups</span>
-                    <div class="conv-tile-dwell-ring"></div>
-                  </button>
-                  <button class="conv-tile" data-gaze-target data-action="spell-clear" style="border-color:#ff5252; background:rgba(255,82,82,0.12);">
-                    <span class="conv-tile-tag">Edit</span>
-                    <span class="conv-tile-text">✕ Clear All</span>
-                    <div class="conv-tile-dwell-ring"></div>
-                  </button>
-                `)
-                    .join('')
-                : LETTER_GROUPS.slice(0, 5)
-                    .map(
-                      (grp) => `
-                  <button class="conv-tile" data-gaze-target data-action="spell-group" data-value="${grp.id}">
-                    <span class="conv-tile-text" style="font-size:1.8rem; letter-spacing:0.12em;">${grp.label}</span>
-                    <div class="conv-tile-dwell-ring"></div>
-                  </button>
-                `
-                    )
-                    .concat(`
-                  <button class="conv-tile" data-gaze-target data-action="spell-clear" style="border-color:#ff5252; background:rgba(255,82,82,0.12);">
-                    <span class="conv-tile-tag">Edit</span>
-                    <span class="conv-tile-text">✕ Clear All</span>
-                    <div class="conv-tile-dwell-ring"></div>
-                  </button>
-                `)
-                    .join('')
-            }
+            <!-- Row 2: A S D F G H J K L -->
+            <div class="conv-qwerty-row">
+              ${['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'].map(
+                (k) => `
+                <button class="conv-tile conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
+                  <span class="conv-tile-text">${k}</span>
+                  <div class="conv-tile-dwell-ring"></div>
+                </button>
+              `
+              ).join('')}
+            </div>
+
+            <!-- Row 3: Z X C V B N M + Backspace -->
+            <div class="conv-qwerty-row">
+              ${['Z', 'X', 'C', 'V', 'B', 'N', 'M'].map(
+                (k) => `
+                <button class="conv-tile conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
+                  <span class="conv-tile-text">${k}</span>
+                  <div class="conv-tile-dwell-ring"></div>
+                </button>
+              `
+              ).join('')}
+              <button class="conv-tile conv-key-tile key-wide-2" data-gaze-target data-action="type-backspace">
+                <span class="conv-tile-text">⌫ Back</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            </div>
+
+            <!-- Row 4: Clear, Space, Speak, WhatsApp -->
+            <div class="conv-qwerty-row">
+              <button class="conv-tile conv-key-tile key-wide-2 key-action-clear" data-gaze-target data-action="type-clear">
+                <span class="conv-tile-text">✕ Clear</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+              <button class="conv-tile conv-key-tile key-wide-4" data-gaze-target data-action="type-space">
+                <span class="conv-tile-text">␣ Space</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+              <button class="conv-tile conv-key-tile key-wide-3 key-action-speak" data-gaze-target data-action="type-speak">
+                <span class="conv-tile-text">🔊 Speak</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+              <button class="conv-tile conv-key-tile key-wide-15" data-gaze-target data-action="type-whatsapp" style="border-color:#25d366; background:rgba(37,211,102,0.12);" title="Send via WhatsApp">
+                <span class="conv-tile-text">💬 WA</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            </div>
           </div>
         </div>
       `;

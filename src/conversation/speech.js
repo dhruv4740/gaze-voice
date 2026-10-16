@@ -7,6 +7,8 @@ export class SpeechListener {
     this.recognition = null;
     this.isListening = false;
     this.shouldListen = false;
+    this.isPausedForSpeech = false;
+    this.resumeTimer = null;
     this.language = 'en-IN';
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -53,8 +55,8 @@ export class SpeechListener {
       this.recognition.onend = () => {
         this.isListening = false;
         this.onStatusChange?.({ isListening: false });
-        // Auto restart if continuous listening is desired
-        if (this.shouldListen) {
+        // Auto restart if continuous listening is desired and not paused for TTS
+        if (this.shouldListen && !this.isPausedForSpeech) {
           try {
             this.recognition.start();
           } catch (e) {
@@ -78,8 +80,31 @@ export class SpeechListener {
     }
   }
 
+  pauseForSpeech() {
+    this.isPausedForSpeech = true;
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    if (this.recognition && this.isListening) {
+      try {
+        this.recognition.stop();
+      } catch (e) {}
+    }
+  }
+
+  resumeAfterSpeech(delayMs = 500) {
+    this.isPausedForSpeech = false;
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    this.resumeTimer = setTimeout(() => {
+      if (this.shouldListen && !this.isPausedForSpeech && this.recognition && !this.isListening) {
+        try {
+          this.recognition.start();
+        } catch (e) {}
+      }
+    }, delayMs);
+  }
+
   start() {
     this.shouldListen = true;
+    this.isPausedForSpeech = false;
     if (this.recognition && !this.isListening) {
       try {
         this.recognition.start();
@@ -91,6 +116,8 @@ export class SpeechListener {
 
   stop() {
     this.shouldListen = false;
+    this.isPausedForSpeech = false;
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
     if (this.recognition && this.isListening) {
       try {
         this.recognition.stop();
@@ -109,7 +136,7 @@ export class SpeechListener {
   }
 }
 
-export function speakPhrase(text, lang = 'en-IN') {
+export function speakPhrase(text, lang = 'en-IN', { onStart, onEnd } = {}) {
   if (!('speechSynthesis' in window) || !text) return;
 
   window.speechSynthesis.cancel(); // cancel any ongoing speech
@@ -118,6 +145,12 @@ export function speakPhrase(text, lang = 'en-IN') {
   utterance.lang = lang;
   utterance.rate = 0.95; // slightly slower for high clarity
   utterance.pitch = 1.0;
+
+  if (onStart) utterance.onstart = onStart;
+  if (onEnd) {
+    utterance.onend = onEnd;
+    utterance.onerror = onEnd;
+  }
 
   // Try to find matching voice
   const voices = window.speechSynthesis.getVoices();
