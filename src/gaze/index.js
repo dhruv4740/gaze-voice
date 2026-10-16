@@ -15,6 +15,7 @@ export function startGaze({ mode = 'mouse', root }) {
   const showStatus = (text, cls = '') => { statusEl.textContent = text; statusEl.className = cls; };
 
   let point = { x: -1, y: -1 };
+  let calibrating = false;
   const setPoint = (x, y) => { point = { x, y }; };
 
   window.addEventListener('mousemove', (e) => {
@@ -29,7 +30,20 @@ export function startGaze({ mode = 'mouse', root }) {
         onPoint: setPoint,
         onStatus: (s) => showStatus(s, s === 'tracking' ? 'ok' : 'bad'),
       });
-      return tracker.start();
+      return tracker.start().then(() => {
+        const recal = document.createElement('button');
+        recal.id = 'gaze-recal';
+        recal.textContent = 'Recalibrate';
+        root.appendChild(recal);
+        const calibrate = async () => {
+          calibrating = true;
+          const { runCalibration } = await import('./calibration.js');
+          await runCalibration({ root, tracker, getPoint: () => point });
+          calibrating = false;
+        };
+        recal.onclick = async () => { if (calibrating) return; await tracker.reset(); calibrate(); };
+        return calibrate();
+      });
     }).catch((err) => {
       console.warn('eyes mode failed, falling back to mouse:', err);
       mode = 'mouse';
@@ -48,7 +62,7 @@ export function startGaze({ mode = 'mouse', root }) {
     cursor.style.top = `${point.y}px`;
     window.dispatchEvent(new CustomEvent('gaze:point', { detail: point }));
 
-    const hit = document.elementFromPoint(point.x, point.y);
+    const hit = calibrating ? null : document.elementFromPoint(point.x, point.y);
     const target = hit && hit.closest('[data-gaze-target]');
 
     if (target !== current) {
