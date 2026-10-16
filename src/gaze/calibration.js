@@ -13,7 +13,7 @@ export function dotPositions() {
 }
 
 // Resolves { meanError } once the user accepts the result.
-export function runCalibration({ root, tracker, getPoint, points = dotPositions(), clicksPerDot = CLICKS_PER_DOT }) {
+export function runCalibration({ root, tracker, getPoint, points = dotPositions(), clicksPerDot = CLICKS_PER_DOT, label = '' }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.id = 'gaze-calib';
@@ -84,8 +84,18 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
       again.textContent = 'Recalibrate';
       const done = document.createElement('button');
       done.textContent = 'Done';
-      msg.append(h, v, again, done);
-      again.onclick = async () => { await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot })); };
+      const cmp = document.createElement('div');
+      cmp.className = 'calib-cmp';
+      if (label && meanError !== null) {
+        // keep the last result per mode so eyes (WebGazer) vs iris (own model) can be compared
+        let all = {};
+        try { all = JSON.parse(localStorage.getItem('gaze-errors') || '{}'); } catch { /* ignore */ }
+        all[label] = meanError;
+        try { localStorage.setItem('gaze-errors', JSON.stringify(all)); } catch { /* ignore */ }
+        cmp.textContent = Object.entries(all).map(([k, e]) => `${k}: ${e}px`).join(' | ');
+      }
+      msg.append(h, v, cmp, again, done);
+      again.onclick = async () => { await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot, label })); };
       done.onclick = () => { overlay.remove(); resolve({ meanError }); };
     }
 

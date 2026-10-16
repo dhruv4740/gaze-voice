@@ -7,6 +7,7 @@ const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const NOSE_TIP = 1;
 const LOST_AFTER_MS = 800;
+const RECENT = 6;
 
 // Least squares for out = a*u + b*v + c over the samples (normal equations, 3x3).
 export function fitAffine(samples, key) {
@@ -32,17 +33,18 @@ export function fitAffine(samples, key) {
   return [S[0][3] / S[0][0], S[1][3] / S[1][1], S[2][3] / S[2][2]];
 }
 
-export function createHeadTracker({ onPoint, onStatus }) {
+// `features(landmarks)` -> number[]; `makeModel(pairs)` -> predict(f) => [x, y] | null,
+// where pairs are { f, x, y } calibration samples. Head and iris modes differ only in these.
+export function createFaceTracker({ onPoint, onStatus, features, makeModel }) {
   let video = null;
   let stream = null;
   let landmarker = null;
   let raf = 0;
   let lastSeen = 0;
   let status = '';
-  let recent = []; // latest nose samples {u, v}
-  let pairs = []; // calibration {u, v, x, y}
-  let mapX = null;
-  let mapY = null;
+  let recent = []; // latest feature vectors
+  let pairs = []; // calibration { f, x, y }
+  let predict = null;
   let running = false;
 
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
@@ -85,35 +87,29 @@ export function createHeadTracker({ onPoint, onStatus }) {
     lastVideoTime = video.currentTime;
     const now = performance.now();
     const res = landmarker.detectForVideo(video, now);
-    const lm = res.faceLandmarks && res.faceLandmarks[0] && res.faceLandmarks[0][NOSE_TIP];
-    if (!lm) {
+    const lms = res.faceLandmarks && res.faceLandmarks[0];
+    const f = lms && features(lms);
+    if (!f) {
       if (now - lastSeen > LOST_AFTER_MS) setStatus('face lost');
       return;
     }
     lastSeen = now;
     setStatus('tracking');
-    const s = { u: 1 - lm.x, v: lm.y }; // mirror so turning right moves right
-    recent.push(s);
-    if (recent.length > 6) recent.shift();
-    if (mapX) onPoint(mapX[0] * s.u + mapX[1] * s.v + mapX[2], mapY[0] * s.u + mapY[1] * s.v + mapY[2]);
+    recent.push(f);
+    if (recent.length > RECENT) recent.shift();
+    const p = predict && predict(f);
+    if (p) onPoint(p[0], p[1]);
   }
 
-  // Calibration click: pair the averaged recent nose position with the dot's screen position.
+  // Calibration click: pair the recent feature vectors with the dot's screen position.
   function record(x, y) {
-    if (!recent.length) return;
-    const u = recent.reduce((a, s) => a + s.u, 0) / recent.length;
-    const v = recent.reduce((a, s) => a + s.v, 0) / recent.length;
-    pairs.push({ u, v, x, y });
+    for (const f of recent) pairs.push({ f, x, y });
   }
 
   // Called by the calibration flow before the accuracy check.
-  function fit() {
-    mapX = fitAffine(pairs, 'x');
-    mapY = fitAffine(pairs, 'y');
-    if (!mapX || !mapY) { mapX = mapY = null; }
-  }
+  function fit() { predict = makeModel(pairs); }
 
-  async function reset() { pairs = []; mapX = mapY = null; }
+  async function reset() { pairs = []; predict = null; }
 
   function stop() {
     running = false;
@@ -124,4 +120,19 @@ export function createHeadTracker({ onPoint, onStatus }) {
   }
 
   return { start, stop, record, reset, fit };
+}
+
+// Head pointer: nose tip (mirrored so turning right moves right) -> screen by an affine map.
+export function createHeadTracker(opts) {
+  return createFaceTracker({
+    ...opts,
+    features: (lm) => [1 - lm[NOSE_TIP].x, lm[NOSE_TIP].y],
+    makeModel(pairs) {
+      const sm = pairs.map((q) => ({ u: q.f[0], v: q.f[1], x: q.x, y: q.y }));
+      const mx = fitAffine(sm, 'x');
+      const my = fitAffine(sm, 'y');
+      if (!mx || !my) return null;
+      return (f) => [mx[0] * f[0] + mx[1] * f[1] + mx[2], my[0] * f[0] + my[1] * f[1] + my[2]];
+    },
+  });
 }

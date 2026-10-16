@@ -18,7 +18,7 @@ export function startGaze({ mode = 'mouse', root }) {
   const params = new URLSearchParams(location.search);
   const sw = document.createElement('select');
   sw.id = 'gaze-mode';
-  for (const m of ['mouse', 'eyes', 'head']) sw.add(new Option(m, m, false, m === mode));
+  for (const m of ['mouse', 'eyes', 'iris', 'head']) sw.add(new Option(m, m, false, m === mode));
   sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
   root.appendChild(sw);
 
@@ -37,13 +37,15 @@ export function startGaze({ mode = 'mouse', root }) {
     if (mode === 'mouse') setPoint(e.clientX, e.clientY);
   });
 
-  if (mode === 'eyes' || mode === 'head') {
+  if (mode === 'eyes' || mode === 'head' || mode === 'iris') {
     showStatus('starting camera…');
     // dynamic imports keep the TensorFlow / MediaPipe bundles out of mouse mode
     const load = mode === 'eyes'
       ? import('./eyes.js').then((m) => m.createEyesTracker)
-      : import('./head.js').then((m) => m.createHeadTracker);
-    const calibOpts = mode === 'head' ? { clicksPerDot: 3 } : {};
+      : mode === 'iris'
+        ? import('./iris.js').then((m) => m.createIrisTracker)
+        : import('./head.js').then((m) => m.createHeadTracker);
+    const calibOpts = mode === 'eyes' ? {} : { clicksPerDot: 3 };
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
@@ -62,6 +64,7 @@ export function startGaze({ mode = 'mouse', root }) {
           calibrating = true;
           const { runCalibration, HEAD_POINTS } = await import('./calibration.js');
           const opts = mode === 'head' ? { points: HEAD_POINTS, ...calibOpts } : calibOpts;
+          opts.label = mode;
           await runCalibration({ root, tracker, getPoint: () => point, ...opts });
           calibrating = false;
         };
