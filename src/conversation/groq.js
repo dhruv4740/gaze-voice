@@ -14,7 +14,7 @@ function getTimeOfDay() {
 
 export async function predictReplies({ utterance, history = [], profile, language = 'en-IN' }) {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-  const model = import.meta.env.VITE_GROQ_MODEL || 'llama-3.1-8b-instant';
+  const model = import.meta.env.VITE_GROQ_MODEL || 'openai/gpt-oss-20b';
 
   if (!apiKey || apiKey.trim() === '') {
     console.warn('VITE_GROQ_API_KEY not configured. Using offline AAC reply fallback.');
@@ -121,13 +121,16 @@ Rules:
 
 export async function predictWordCompletions(prefix, context = '') {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-  const model = import.meta.env.VITE_GROQ_MODEL || 'llama-3.1-8b-instant';
+  const model = import.meta.env.VITE_GROQ_MODEL || 'openai/gpt-oss-20b';
 
   if (!apiKey || !prefix || prefix.length < 2) {
     return getLocalWordCompletions(prefix);
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     const prompt = `Return a JSON object with a "words" array containing the 4 most likely next words starting with "${prefix}" in medical/assistive AAC context. JSON format: {"words": ["word1", "word2", "word3", "word4"]}`;
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
@@ -140,10 +143,13 @@ export async function predictWordCompletions(prefix, context = '') {
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
         reasoning_effort: 'low',
-        max_completion_tokens: 100,
+        max_completion_tokens: 300,
         response_format: { type: 'json_object' }
-      })
+      }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!res.ok) return getLocalWordCompletions(prefix);
     const data = await res.json();

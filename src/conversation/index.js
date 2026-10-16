@@ -262,10 +262,10 @@ export function startConversation(app) {
         </div>
 
         <div class="conv-controls">
-          <button class="conv-btn-pill ${isListening ? 'active' : ''}" data-gaze-target data-action="toggle-mic">
+          <button class="conv-btn-pill ${isListening ? 'active' : ''}" data-action="toggle-mic">
             🎤 ${isListening ? 'Mic On' : 'Mic Off'}
           </button>
-          <button class="conv-btn-pill" data-gaze-target data-action="toggle-lang">
+          <button class="conv-btn-pill" data-action="toggle-lang">
             🌐 ${isHi ? 'हिन्दी (HI)' : 'English (EN)'}
           </button>
           <button class="conv-btn-pill" data-action="toggle-input" title="Manual Text Box Fallback">
@@ -288,8 +288,46 @@ export function startConversation(app) {
       }
     `;
 
-    // 4. Side Navigation Rail
-    const navRailHtml = `
+    // 4. Side Navigation Rail (All large gaze targets >= 200x150px or substantial tiles)
+    const navRailHtml = mode === 'spell' ? `
+      <nav class="conv-nav-rail">
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-speak" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.15);">
+          <span class="conv-tile-tag">Action</span>
+          <span class="conv-tile-text">🔊 Speak</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-space">
+          <span class="conv-tile-tag">Letter</span>
+          <span class="conv-tile-text">␣ Space</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-backspace">
+          <span class="conv-tile-tag">Edit</span>
+          <span class="conv-tile-text">⌫ Backspace</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-clear">
+          <span class="conv-tile-tag">Edit</span>
+          <span class="conv-tile-text">✕ Clear</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
+          <span class="conv-tile-tag">Return</span>
+          <span class="conv-tile-text">💬 Back to Chat</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-dwell="2000" data-action="emergency">
+          <span class="conv-tile-tag">Hold 2s</span>
+          <span class="conv-tile-text">🚨 EMERGENCY</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+      </nav>
+    ` : `
       <nav class="conv-nav-rail">
         <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
           <span class="conv-tile-tag">Navigation</span>
@@ -297,15 +335,21 @@ export function startConversation(app) {
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
-        <button class="conv-tile conv-tile-nav ${mode === 'categories' ? 'gaze-hover' : ''}" data-gaze-target data-action="nav-categories">
+        <button class="conv-tile conv-tile-nav ${mode === 'categories' ? 'is-active' : ''}" data-gaze-target data-action="nav-categories">
           <span class="conv-tile-tag">AAC Library</span>
           <span class="conv-tile-text">📂 ${isHi ? 'श्रेणियाँ' : 'Categories'}</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
-        <button class="conv-tile conv-tile-nav ${mode === 'spell' ? 'gaze-hover' : ''}" data-gaze-target data-action="nav-spell">
+        <button class="conv-tile conv-tile-nav ${mode === 'spell' ? 'is-active' : ''}" data-gaze-target data-action="nav-spell">
           <span class="conv-tile-tag">Keyboard</span>
           <span class="conv-tile-text">🔤 ${isHi ? 'लिखें' : 'Spell'}</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="toggle-lang">
+          <span class="conv-tile-tag">Language</span>
+          <span class="conv-tile-text">🌐 ${isHi ? 'हिन्दी (HI)' : 'English (EN)'}</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
@@ -387,10 +431,10 @@ export function startConversation(app) {
               ${escapeHtml(spellEngine.buffer)}<span class="conv-spell-cursor"></span>
             </div>
             <div class="conv-spell-actions">
-              <button class="conv-btn-pill" data-gaze-target data-action="spell-space">␣ Space</button>
-              <button class="conv-btn-pill" data-gaze-target data-action="spell-backspace">⌫ Backspace</button>
-              <button class="conv-btn-pill" data-gaze-target data-action="spell-clear">✕ Clear</button>
-              <button class="conv-btn-pill active" data-gaze-target data-action="spell-speak" style="background:#00e5ff; color:#0b0e14; font-weight:700;">
+              <button class="conv-btn-pill" data-action="spell-space">␣ Space</button>
+              <button class="conv-btn-pill" data-action="spell-backspace">⌫ Backspace</button>
+              <button class="conv-btn-pill" data-action="spell-clear">✕ Clear</button>
+              <button class="conv-btn-pill active" data-action="spell-speak" style="background:#00e5ff; color:#0b0e14; font-weight:700;">
                 🔊 Speak
               </button>
             </div>
