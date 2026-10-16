@@ -73,6 +73,7 @@ export function createStats({ root }) {
   }
 
   return {
+    reset() { selections = 0; gapSum = 0; gaps = 0; words = 0; errs.length = 0; firstAt = null; lastAt = performance.now(); fatigue = null; },
     addError(px) { errs.push(px); if (errs.length > 40) errs.shift(); },
     update(f) { fatigue = f; },
     get visible() { return !box.hidden; },

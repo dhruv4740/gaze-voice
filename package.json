@@ -9,7 +9,8 @@
     "relay": "node server/relay.js",
     "phone": "concurrently -k \"npm:relay\" \"npm:dev:host\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch-models": "node scripts/fetch-models.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",
