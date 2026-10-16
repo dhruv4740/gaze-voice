@@ -18,6 +18,15 @@ export function startCaregiverLink({ ui }) {
     try { ws = new WebSocket(relayUrl); } catch { return; }
     ws.onopen = () => { while (queue.length) ws.send(JSON.stringify(queue.shift())); };
     ws.onclose = () => setTimeout(connect, 3000);
+    ws.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type !== 'question' || Date.now() - (m.t || 0) > 30000) return; // relay history replay: ignore old
+      const text = String(m.text || '').trim().slice(0, 300);
+      if (!text) return;
+      window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text, from: 'phone' } })); // wakes a manual rest
+      window.dispatchEvent(new CustomEvent('aac:remote-question', { detail: { text, from: m.from || 'caregiver' } }));
+      if (m.speak && 'speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    };
     ws.onerror = () => { /* relay not running: events are queued, retried on close */ };
   };
   connect();

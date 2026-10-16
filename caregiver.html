@@ -11,6 +11,15 @@
     <button id="enable">Tap to enable sound &amp; vibration</button>
     <section id="requests"></section>
     <section id="feed"></section>
+    <form id="ask">
+      <div id="chips"></div>
+      <div class="row">
+        <input id="q" type="text" maxlength="300" placeholder="Ask a question…" autocomplete="off" enterkeyhint="send" />
+        <button type="button" id="mic" hidden aria-label="Speak a question">🎤</button>
+        <button type="submit" id="send">Send</button>
+      </div>
+      <label id="speak-row"><input type="checkbox" id="speak" /> Also speak aloud on laptop</label>
+    </form>
     <div id="alert" hidden>
       <div>EMERGENCY</div>
       <small id="alert-time"></small>
