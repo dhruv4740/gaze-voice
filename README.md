@@ -22,10 +22,25 @@ The two halves only talk through [docs/CONTRACT.md](docs/CONTRACT.md).
 
 More: [docs/PLAN.md](docs/PLAN.md) · [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md)
 
+## It learns while you use it
+Every confirmed selection becomes a calibration sample (median raw features of the last 400 ms
+paired with the target centre) and the head/iris/eyes models refit every few selections. The
+stats panel shows pointer error per selection as a sparkline. A fatigue watch (blink rate vs
+your own baseline, selections slowing) shows a "Take a break?" tile, lengthens the default
+dwell, and sends `gaze:fatigue` to the caregiver phone. Demo: `__gazeFatigue.force('mild')`.
+
+## Caregiver phone companion
+`npm run phone` starts the relay (port 8787) and Vite on the LAN. On the patient laptop
+tap **Caregiver QR** (bottom-left) and scan it with a phone on the same Wi-Fi. The phone
+page shows what the patient says, request cards, fatigue notices, and a full-screen red
+alert with vibration and sound on emergency. Only short text events go through the relay.
+
 ## Credits
 All code was written during the event on 16 Oct 2026, with AI coding assistants
 (Claude by Anthropic). Libraries and APIs used: [Vite](https://vite.dev) (MIT),
-[WebGazer.js](https://webgazer.cs.brown.edu) (GPLv3),
+[WebGazer.js](https://webgazer.cs.brown.edu) (GPLv3, with MediaPipe Face Mesh, Apache-2.0),
 [MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe) (Apache-2.0),
 [Groq API](https://groq.com) with openai/gpt-oss-20b, Google Gemini API (fallback),
+[ws](https://github.com/websockets/ws) (MIT, caregiver relay),
+[node-qrcode](https://github.com/soldair/node-qrcode) (MIT, phone QR code),
 and the browser Web Speech API.

@@ -17,6 +17,15 @@ file in the same commit.
 - `window` gets `CustomEvent('gaze:point', { detail: { x, y } })` every frame.
 - After a selection the user must look away and back to select again.
 
+## Team B announces things for the caregiver phone (Team A relays them)
+Dispatch on `window`; Team A forwards them over the WebSocket relay to `caregiver.html`.
+- `new CustomEvent('aac:spoken', { detail: { text, lang } })` whenever the app speaks.
+- `new CustomEvent('aac:emergency')` when emergency fires.
+- `new CustomEvent('aac:request', { detail: { kind, label } })` for requests such as
+  `{ kind: 'lights', label: 'Lights' }` or `{ kind: 'nurse', label: 'Nurse' }`.
+- Team A also dispatches `new CustomEvent('gaze:fatigue', { detail: { level } })` (level
+  `'mild' | 'high'`); Team B may react (for example a "Take a break?" tile).
+
 ## Entry points (called from `src/main.js`)
 - Team A: `startGaze({ mode, root })`, mode `'mouse' | 'eyes' | 'head'`.
 - Team B: `startConversation(appElement)`.
