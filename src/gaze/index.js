@@ -1,6 +1,7 @@
 // Team A (Opus + Sonnet) owns everything in src/gaze/.
 // Modes: mouse (placeholder), eyes (WebGazer). Contract: docs/CONTRACT.md.
 import './gaze.css';
+import { createPointSmoother } from './smoothing.js';
 
 const DEFAULT_DWELL_MS = 1200;
 
@@ -17,6 +18,13 @@ export function startGaze({ mode = 'mouse', root }) {
   let point = { x: -1, y: -1 };
   let calibrating = false;
   const setPoint = (x, y) => { point = { x, y }; };
+  const smoother = createPointSmoother();
+  // raw tracker samples go through One Euro + dead zone; (-1,-1) means "no face"
+  const setRaw = (x, y) => {
+    if (x < 0) { smoother.reset(); setPoint(-1, -1); return; }
+    const p = smoother.filter(x, y, performance.now());
+    setPoint(p.x, p.y);
+  };
 
   window.addEventListener('mousemove', (e) => {
     if (mode === 'mouse') setPoint(e.clientX, e.clientY);
@@ -27,11 +35,11 @@ export function startGaze({ mode = 'mouse', root }) {
     // dynamic import keeps the TensorFlow bundle out of mouse mode
     import('./eyes.js').then(({ createEyesTracker }) => {
       const tracker = createEyesTracker({
-        onPoint: setPoint,
+        onPoint: setRaw,
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
-          if (s === 'face lost') setPoint(-1, -1);
+          if (s === 'face lost') setRaw(-1, -1);
         },
       });
       return tracker.start().then(() => {
