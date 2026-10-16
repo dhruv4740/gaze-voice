@@ -162,6 +162,7 @@ body, html {
    Hero Band: 6 Reply Tiles (3x2 Grid, ~65% of viewport height)
    -------------------------------------------------------------------------- */
 .conv-hero-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(2, 1fr);
@@ -169,6 +170,15 @@ body, html {
   flex: 1;
   min-height: 0;
 }
+
+/* Waiting for the AI: keep the old replies, dim them, show a thin moving line, make them non-selectable */
+.conv-hero-grid.is-thinking .conv-reply-tile:not(.is-pinned) { opacity: 0.55; transition: opacity 0.2s; }
+.conv-hero-grid.is-thinking::after {
+  content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--conv-accent, #3b82f6), transparent);
+  background-size: 40% 100%; background-repeat: no-repeat; animation: conv-think 1s linear infinite;
+}
+@keyframes conv-think { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 
 .conv-reply-tile {
   position: relative;

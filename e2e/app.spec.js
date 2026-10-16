@@ -136,6 +136,36 @@ test('5. a question fills the role slots without moving anything', async ({ page
   expect(await rects(page, [...SLOTS, ...CORE])).toEqual(before);
 });
 
+test('5d. while the AI thinks the old replies stay, are not selectable, and change exactly once per question', async ({ page }) => {
+  await prep(page);
+  let calls = 0;
+  await page.route('https://api.groq.com/**', async (r) => {
+    calls++;
+    await new Promise((res) => setTimeout(res, 1200));
+    r.fulfill({ json: { choices: [{ message: { content: JSON.stringify(roles(`Q${calls}`)) } }] } });
+  });
+  await page.goto('/?mode=mouse');
+  await page.waitForSelector('#slot-agree');
+  await openAsk(page);
+  await page.evaluate(() => {
+    window.__chg = 0;
+    new MutationObserver(() => window.__chg++).observe(document.querySelector('#slot-agree .conv-reply-text'), { childList: true, characterData: true, subtree: true });
+  });
+  const before = await page.locator('#slot-agree .conv-reply-text').innerText();
+  await ask(page, 'Are you in pain right now?');
+  await expect(page.locator('.conv-hero-grid')).toHaveClass(/is-thinking/);
+  await expect(page.locator('#slot-agree')).not.toHaveAttribute('data-gaze-target', /.*/);
+  await expect(page.locator('#slot-agree .conv-reply-text')).toHaveText(before); // old text kept, no offline flash
+  await page.locator('#slot-agree').click({ force: true });
+  expect(await ev(page, 'spoken')).toEqual([]); // cannot speak while pending
+  await expect(page.locator('#slot-agree .conv-reply-text')).toHaveText(/Yes Q1 agree/, { timeout: 4000 });
+  await expect(page.locator('.conv-hero-grid')).not.toHaveClass(/is-thinking/);
+  await expect(page.locator('#slot-agree')).toHaveAttribute('data-gaze-target', /.*/);
+  await page.waitForTimeout(3200); // no late second swap
+  expect(await page.evaluate(() => window.__chg)).toBe(1);
+  await expect(page.locator('#slot-agree .conv-reply-text')).toHaveText(/Yes Q1 agree/);
+});
+
 test.fixme('5b. caregiver pills (Manual Text Box etc.) respond to a click', async ({ page }) => {
   // fixme (Team B): src/conversation/index.js onClick/onGazeSelect return early unless the target has
   // [data-gaze-target]; the .conv-btn-pill buttons (toggle-input, toggle-mic, open-profile ...) don't, so a click does nothing.
