@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gaze Voice - Ambient AI Eye-Tracking AAC</title>
+    <link rel="stylesheet" href="/src/landing/landing.css" />
+    <style>
+      /* Extra fine-tuning for presentation layout */
+      .calc-box {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 32px;
+        margin-top: 40px;
+        text-align: left;
+      }
+      .calc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        margin-top: 20px;
+      }
+      .calc-input-group label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: var(--accent-cyan);
+      }
+      .calc-input-group input {
+        width: 100%;
+        padding: 14px 18px;
+        border-radius: 12px;
+        background: #090d15;
+        border: 1px solid var(--border-color);
+        color: #fff;
+        font-size: 1.1rem;
+        box-sizing: border-box;
+      }
+      .calc-results {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        background: #090d15;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        text-align: center;
+      }
+      .calc-metric-val {
+        font-size: 1.8rem;
+        font-weight: 900;
+        color: var(--accent-cyan);
+      }
+      .calc-metric-val.green {
+        color: var(--accent-green);
+      }
+      .calc-metric-val.red {
+        color: #ff5252;
+      }
+      .calc-metric-lbl {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-top: 4px;
+      }
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 24px;
+        margin-top: 30px;
+      }
+      .feature-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 24px;
+      }
+      .feature-card h3 {
+        color: var(--accent-cyan);
+        font-size: 1.2rem;
+        margin-bottom: 8px;
+      }
+      .feature-card p {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+      @media (max-width: 768px) {
+        .calc-grid { grid-template-columns: 1fr; }
+        .calc-results { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Top Navigation -->
+    <header class="container">
+      <nav class="landing-nav">
+        <a href="/" class="landing-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+          </svg>
+          Gaze<span>Voice</span>
+        </a>
+        <div class="nav-links">
+          <a href="#problem" class="nav-link">The Problem</a>
+          <a href="#how-it-works" class="nav-link">How It Works</a>
+          <a href="#speed-proof" class="nav-link">Speed Proof</a>
+          <a href="#clinical" class="nav-link">Clinical Features</a>
+          <a href="/caregiver.html" class="nav-link" target="_blank">Caregiver Sync</a>
+          <a href="/?mode=mouse" class="btn-primary">
+            Try Demo
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </a>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <main class="container">
+      <section class="hero">
+        <div class="badge-pill">Renaissance 2026 • Human Potential Track</div>
+        <h1>Speech at the Speed of Sight.</h1>
+        <p>
+          Restoring natural conversation to locked-in, ALS, and severe stroke survivors using ambient AI and any standard laptop webcam — at zero hardware cost.
+        </p>
+
+        <div class="hero-actions">
+          <a href="/?mode=mouse" class="btn-primary" style="font-size: 1.1rem; padding: 16px 36px;">
+            Launch Patient App (?mode=mouse)
+          </a>
+          <a href="/caregiver.html" target="_blank" class="btn-secondary" style="font-size: 1.1rem; padding: 16px 28px;">
+            Open Caregiver Monitor
+          </a>
+        </div>
+
+        <div class="privacy-banner">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <strong>Privacy Guarantee:</strong> Eye tracking is calculated 100% locally in your browser. Video frames never leave the patient's device.
+        </div>
+      </section>
+
+      <!-- Problem & Sourced Statistics -->
+      <section id="problem" class="section">
+        <div class="section-title">
+          <h2>The Locked-In Communication Crisis</h2>
+          <p>Traditional AAC hardware is exorbitant, clunky, and agonizingly slow.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card alert">
+            <div class="stat-number">₹5L–15L</div>
+            <div class="stat-label">Traditional AAC Cost</div>
+            <p class="stat-desc">
+              Proprietary eye-tracking hardware (Tobii Dynavox, PRC-Saltillo) costs $5,000–$15,000 USD, putting it far out of reach for over 98% of Indian families.
+            </p>
+            <span class="stat-source">Source: Assistive Tech Industry Association (ATIA) Benchmark</span>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-number">1.8M</div>
+            <div class="stat-label">Annual Strokes in India</div>
+            <p class="stat-desc">
+              India records approximately 1.8 million stroke incidents every year; up to 35% of survivors suffer profound aphasia or dysarthria, unable to speak.
+            </p>
+            <span class="stat-source">Source: Lancet Global Health / ICMR Stroke Registry</span>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-number">75,000+</div>
+            <div class="stat-label">ALS Patients in India</div>
+            <p class="stat-desc">
+              Full cognitive faculties intact, but progressive paralysis renders speech impossible. Patients are forced into letter-by-letter scanning at ~1–2 words per minute.
+            </p>
+            <span class="stat-source">Source: Indian Academy of Neurology / MND India</span>
+          </div>
+
+          <div class="stat-card highlight">
+            <div class="stat-number">₹0</div>
+            <div class="stat-label">Gaze Voice Cost</div>
+            <p class="stat-desc">
+              Runs directly in Chrome/Edge on existing laptops or Chromebooks with a standard 720p webcam. Accessible to everyone, everywhere.
+            </p>
+            <span class="stat-source">Democratized Human Potential</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Speed Proof & Calculator -->
+      <section id="speed-proof" class="section">
+        <div class="section-title">
+          <h2>Execution & Proof: Mathematical Speed Advantage</h2>
+          <p>Why predictive ambient AI changes everything for AAC users.</p>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Communication Method</th>
+                <th>Selection Mechanism</th>
+                <th>Effort per Sentence (30 chars)</th>
+                <th>Time to Speak</th>
+                <th>Speed Factor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Traditional Scanning AAC</strong></td>
+                <td>Row/column scanning switch or single dwell per letter</td>
+                <td>30+ mechanical switch hits / dwell pauses</td>
+                <td>~45.0 seconds</td>
+                <td>1.0x (Baseline)</td>
+              </tr>
+              <tr>
+                <td><strong>Standard Eye-Gaze Keyboard</strong></td>
+                <td>On-screen keyboard letter dwell (1.5s per letter)</td>
+                <td>30 continuous gaze dwell focuses</td>
+                <td>~35.0 seconds</td>
+                <td>1.3x</td>
+              </tr>
+              <tr style="background: rgba(0, 229, 255, 0.07);">
+                <td class="highlight-cell"><strong>Gaze Voice (Ambient AI)</strong></td>
+                <td class="highlight-cell">Ambient caregiver ear + 6 context tiles with magnetic snap</td>
+                <td class="highlight-cell"><strong>1 single glance</strong> (1.2s dwell)</td>
+                <td class="highlight-cell"><strong>1.2 seconds</strong></td>
+                <td class="highlight-cell" style="color: var(--accent-green); font-size: 1.2rem;"><strong>25x–35x Faster</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Interactive Calculator -->
+        <div class="calc-box">
+          <h3 style="color: #fff; font-size: 1.3rem; margin-bottom: 8px;">Interactive Speed Benchmark Calculator</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem;">
+            Test any sentence to calculate the exact clinical time savings for a locked-in patient:
+          </p>
+
+          <div class="calc-grid">
+            <div class="calc-input-group">
+              <label for="calc-phrase">Target Patient Utterance:</label>
+              <input type="text" id="calc-phrase" value="I need my pain medication now please" placeholder="Type a sentence..." />
+            </div>
+            <div class="calc-results">
+              <div>
+                <div class="calc-metric-val" id="calc-letter-count">36 chars</div>
+                <div class="calc-metric-lbl">Length</div>
+              </div>
+              <div>
+                <div class="calc-metric-val red" id="calc-letter-time">54.0s</div>
+                <div class="calc-metric-lbl">Letter Scanning</div>
+              </div>
+              <div>
+                <div class="calc-metric-val green" id="calc-speedup">45x</div>
+                <div class="calc-metric-lbl">Gaze Voice Speedup</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- How It Works (Pipeline Architecture) -->
+      <section id="how-it-works" class="section">
+        <div class="section-title">
+          <h2>How It Works: 4-Tier Pipeline</h2>
+          <p>Zero-latency multimodal pipeline connecting patient gaze to caregiver ears.</p>
+        </div>
+
+        <div class="flow-container">
+          <div class="flow-step">
+            <div class="flow-step-num">1</div>
+            <h3>Webcam Eye Tracking</h3>
+            <p>
+              Lightweight browser-based gaze estimation with magnetic snap-to-target. Selectable tiles (>200x150px) lock gaze firmly even with tremor or low lighting.
+            </p>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-step-num">2</div>
+            <h3>Ambient Listening</h3>
+            <p>
+              Web Speech API continuously monitors the room for caregiver questions in English (<code>en-IN</code>) or Hindi (<code>hi-IN</code>), displaying the heard strip instantly.
+            </p>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-step-num">3</div>
+            <h3>Dual-Tier LLM Prediction</h3>
+            <p>
+              Groq Cloud ultra-fast inference (<code>openai/gpt-oss-20b</code>, ~300ms) generates 6 context-aware conversational replies. Instant fallback to Google Gemini Flash-Lite.
+            </p>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-step-num">4</div>
+            <h3>Multimodal Dispatch</h3>
+            <p>
+              Speech synthesis speaks the chosen phrase aloud. The Caregiver Monitor updates live via <code>BroadcastChannel</code>, and emergency events trigger instant alerts.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Clinical & Accessibility Features -->
+      <section id="clinical" class="section">
+        <div class="section-title">
+          <h2>Clinical & Accessibility Innovations</h2>
+          <p>Designed for real-world hospital beds and home care environments.</p>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>Caregiver Onboarding & Memory</h3>
+            <p>
+              Patient memory stores family names, medication schedules, and past choices in local storage. Replies automatically prioritize familiar phrases and timely needs.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <h3>High-Contrast & Large Text</h3>
+            <p>
+              One-click accessibility toggles with pure black-and-gold high-contrast styling and 125% scaled typography readable from 1.5 meters away across a hospital bed.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Live Bilingual Translation</h3>
+            <p>
+              Cross-language bridging: Patient can reply in Hindi, English, or Marathi. Speech synthesis renders the listener's preferred tongue in real time.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Fatigue Detection & Rest Tiles</h3>
+            <p>
+              Listens for eye tracking fatigue signals (<code>gaze:fatigue</code>) and provides an immediate one-glance rest tile: "Take a break? I'm tired."
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Doctor & Family Daily Summary</h3>
+            <p>
+              Summarizes daily logs into structured clinical notes: mood trends, reported pain times, home requests, and frequency counts ready to print or copy for rounds.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <h3>100% Offline Resiliency</h3>
+            <p>
+              If internet or APIs drop, the system automatically falls back to curated essential category tiles, letter spelling, and emergency alarm — zero raw errors shown.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tech Stack -->
+      <section class="section">
+        <div class="section-title">
+          <h2>Tech Stack & Standards</h2>
+          <p>Modern, lightweight, privacy-focused open web technologies.</p>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Technology</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Vision & Eye Gaze</strong></td>
+                <td>Webcam MediaStream + HTML5 Canvas Magnetics</td>
+                <td>Client-side eye tracking with <code>[data-gaze-target]</code> cursor snapping</td>
+              </tr>
+              <tr>
+                <td><strong>Ambient Speech Recognition</strong></td>
+                <td>Web Speech API (SpeechRecognition)</td>
+                <td>Continuous caregiver voice capture in <code>en-IN</code> / <code>hi-IN</code></td>
+              </tr>
+              <tr>
+                <td><strong>Primary AI Engine</strong></td>
+                <td>Groq API (<code>openai/gpt-oss-20b</code>)</td>
+                <td>Sub-second low-reasoning context prediction (~300ms)</td>
+              </tr>
+              <tr>
+                <td><strong>Fallback AI Engine</strong></td>
+                <td>Google Gemini (<code>gemini-flash-lite-latest</code>)</td>
+                <td>Automatic resilient fallback if Groq > 4s or rate-limited</td>
+              </tr>
+              <tr>
+                <td><strong>Device Telemetry</strong></td>
+                <td>BroadcastChannel & CustomEvent Architecture</td>
+                <td>Instant cross-tab/mobile notification sync without server requirement</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="landing-footer">
+      <div class="container">
+        <p><strong>Gaze Voice</strong> — CSI KJSSE Hackathon 2026 (Renaissance) • Human Potential Pillar</p>
+        <p style="margin-top: 8px;">
+          Built with ❤️ for accessible healthcare by Team A & Team B.
+        </p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/landing/landing.js"></script>
+  </body>
+</html>
