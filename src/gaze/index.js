@@ -36,7 +36,7 @@ export function startGaze({ mode = 'mouse', root }) {
   ui.appendChild(sw);
 
   const stats = createStats({ root });
-  const fatigue = createFatigue({ root });
+  const fatigue = createFatigue();
   window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
   setInterval(() => stats.update(fatigue.stats()), 1000);
   let learner = null; // camera tracker's learn(x, y), set once tracking starts
@@ -148,7 +148,6 @@ export function startGaze({ mode = 'mouse', root }) {
   let hovered = null;
   let hoverEl = null;
   let hoverStart = 0;
-  const breakTile = document.getElementById('gaze-break');
 
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
@@ -157,7 +156,7 @@ export function startGaze({ mode = 'mouse', root }) {
       const b = el.getBoundingClientRect();
       const cx = (b.left + b.right) / 2; const cy = (b.top + b.bottom) / 2;
       stats.addError(Math.hypot(point.x - cx, point.y - cy));
-      if (learner && el !== breakTile) learner(cx, cy);
+      if (learner) learner(cx, cy);
     }
     el.dispatchEvent(new CustomEvent('gaze-select', { bubbles: true }));
     el.classList.remove('gaze-hover');
