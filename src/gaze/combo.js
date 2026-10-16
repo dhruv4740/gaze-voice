@@ -26,5 +26,6 @@ export function createComboTracker({ face = 'head', onPoint, onStatus, onPinch, 
     count: () => faceT.count(),
     meanSince: (...a) => faceT.meanSince(...a),
     trim: (...a) => faceT.trim(...a),
+    debug: () => ({ ...faceT.debug(), ...handT.debug() }),
   };
 }

@@ -55,6 +55,7 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
   let hist = []; // { t, f } raw features of the last second, before any smoothing
   let learned = []; // { f, x, y } from confirmed selections
   let sinceFit = 0;
+  let lastLms = null; let calibErr = null; // for X-ray mode
 
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
 
@@ -115,6 +116,7 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     const res = landmarker.detectForVideo(video, now);
     meter(now, performance.now() - c0);
     const lms = res.faceLandmarks && res.faceLandmarks[0];
+    lastLms = lms || null;
     const f = lms && features(lms);
     if (!f) {
       if (now - lastSeen > LOST_AFTER_MS) setStatus('face lost');
@@ -152,7 +154,14 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
   }
 
   // Called by the calibration flow before the accuracy check.
-  function fit() { predict = makeModel(pairs); }
+  function fit() {
+    predict = makeModel(pairs);
+    if (predict && pairs.length) { // mean distance (px) between the fitted model and the calibration clicks
+      let sum = 0;
+      for (const q of pairs) { const p = predict(q.f); sum += Math.hypot(p[0] - q.x, p[1] - q.y); }
+      calibErr = sum / pairs.length;
+    }
+  }
 
   // A confirmed selection is a free calibration sample: median of the raw features from the
   // last 400 ms paired with the target centre. Refits every few samples once a model exists.
@@ -184,7 +193,8 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     landmarker?.close();
   }
 
-  return { start, stop, record, reset, resetLearning, fit, learn, count, meanSince, trim };
+  const debug = () => ({ lms: lastLms, calibErr, pairs: pairs.length, learned: learned.length });
+  return { start, stop, record, reset, resetLearning, fit, learn, count, meanSince, trim, debug };
 }
 
 // Head pointer: nose tip (mirrored so turning right moves right) -> screen by an affine map.
