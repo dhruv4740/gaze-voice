@@ -28,7 +28,11 @@ export function startGaze({ mode = 'mouse', root }) {
     import('./eyes.js').then(({ createEyesTracker }) => {
       const tracker = createEyesTracker({
         onPoint: setPoint,
-        onStatus: (s) => showStatus(s, s === 'tracking' ? 'ok' : 'bad'),
+        onStatus: (s) => {
+          showStatus(s, s === 'tracking' ? 'ok' : 'bad');
+          // no face: park the pointer off-screen so dwell can't fire on a frozen point
+          if (s === 'face lost') setPoint(-1, -1);
+        },
       });
       return tracker.start().then(() => {
         const recal = document.createElement('button');

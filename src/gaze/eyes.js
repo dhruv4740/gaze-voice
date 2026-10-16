@@ -30,7 +30,6 @@ export function createEyesTracker({ onPoint, onStatus, preview = true }) {
     }
     started = true;
     webgazer.removeMouseEventListeners();
-    webgazer.applyKalmanFilter(false); // we smooth ourselves (smoothing.js)
     webgazer.showPredictionPoints(false);
     webgazer.showFaceOverlay(false);
     webgazer.showFaceFeedbackBox(false);
