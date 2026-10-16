@@ -170,9 +170,13 @@ export function speakPhrase(text, lang = 'en-IN', { onStart, onEnd, tone = 'gent
     voices.find((v) => v.lang.toLowerCase().startsWith(targetPrefix)) ||
     voices.find((v) => v.default);
 
-  if (voice) {
-    utterance.voice = voice;
+  if (voices.length && targetPrefix !== 'en' && !voice?.lang?.toLowerCase().startsWith(targetPrefix)) {
+    // no voice for this language: an English voice would read it as noise, so skip speaking (the text is still shown)
+    console.warn(`No ${lang} voice installed; not speaking.`);
+    if (onEnd) onEnd();
+    return;
   }
+  if (voice) utterance.voice = voice;
 
   window.speechSynthesis.speak(utterance);
 }

@@ -2,8 +2,12 @@
 
 export const LISTENER_LANGUAGES = [
   { code: 'en-IN', name: 'English', label: 'English' },
-  { code: 'hi-IN', name: 'Hindi', label: 'हिन्दी' },
-  { code: 'mr-IN', name: 'Marathi', label: 'मराठी' }
+  { code: 'hi-IN', name: 'Hindi', label: 'हिन्दी', script: 'Devanagari' },
+  { code: 'mr-IN', name: 'Marathi', label: 'मराठी', script: 'Devanagari' },
+  { code: 'gu-IN', name: 'Gujarati', label: 'ગુજરાતી', script: 'Gujarati' },
+  { code: 'ta-IN', name: 'Tamil', label: 'தமிழ்', script: 'Tamil' },
+  { code: 'bn-IN', name: 'Bengali', label: 'বাংলা', script: 'Bengali' },
+  { code: 'te-IN', name: 'Telugu', label: 'తెలుగు', script: 'Telugu' }
 ];
 
 const COMMON_TRANSLATIONS = {
@@ -70,10 +74,11 @@ export async function translateText({ text, targetLang = 'en-IN' }) {
 
   if (!apiKey) return text;
 
-  const langName = targetLang.startsWith('mr') ? 'Marathi' : 'Hindi';
+  const lang = LISTENER_LANGUAGES.find((l) => l.code === targetLang) || LISTENER_LANGUAGES[1];
+  const langName = lang.name;
 
   try {
-    const prompt = `Translate this sentence into natural spoken ${langName} in Devanagari script for an AAC patient. Return ONLY the translation, nothing else: "${text}"`;
+    const prompt = `Translate this sentence into natural spoken ${langName} in ${lang.script} script for an AAC patient. Return ONLY the translation, nothing else: "${text}"`;
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
