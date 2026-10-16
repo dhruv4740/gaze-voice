@@ -25,7 +25,8 @@ const info = (res) => {
   res.end(JSON.stringify({ ips: lanIps(), port: PORT }));
 };
 const server = http.createServer((req, res) => {
-  const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+  let pathname;
+  try { pathname = decodeURIComponent((req.url || '/').split('?')[0]); } catch { res.statusCode = 400; return res.end('bad request'); }
   if (!hasDist || pathname === '/relay-info' || pathname === '/relay') return info(res);
   let file = path.join(DIST, pathname.endsWith('/') ? pathname + 'index.html' : pathname);
   if (!file.startsWith(DIST + path.sep) && file !== DIST) { res.statusCode = 403; return res.end('forbidden'); }
