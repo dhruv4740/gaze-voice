@@ -5,8 +5,8 @@
 // full QWERTY keyboard screen, stop/listen audio tile, deduplication.
 
 import './conversation.css';
-import { getMemory, saveMemory, logInteraction, getDailyLog } from './memory.js';
-import { CATEGORIES, getOfflineReplies } from './categories.js';
+import { getMemory, saveMemory, logInteraction, getDailyLog, getPinnedReplies, togglePinnedReply } from './memory.js';
+import { CATEGORIES, getOfflineReplies, getOfflineRoleReplies } from './categories.js';
 import { predictReplies, predictWordCompletions } from './groq.js';
 import { SpeechListener, speakPhrase } from './speech.js';
 import { SpellEngine, LETTER_GROUPS } from './spell.js';
@@ -36,6 +36,13 @@ export function startConversation(app) {
   let isResting = false;
   let isAudioStopped = false;
   let lastUtteranceNormalized = '';
+
+  // Stable Board & Role-Based AI State (Round 4)
+  let lastSpokenText = 'Yes, I slept well.';
+  let spokenHistory = ['Yes, I slept well.', 'Water with straw please.', 'Thank you.'];
+  let pinnedReplies = getPinnedReplies();
+  let roleReplies = getOfflineRoleReplies('Did you sleep well?', patientLang);
+  let chatMounted = false;
 
   // Type / QWERTY Keyboard State
   let typeBuffer = '';
@@ -126,10 +133,10 @@ export function startConversation(app) {
     window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text } }));
     isResting = false;
 
-    // 1. Instant feel: immediately display offline contextual replies (0ms delay)
-    replies = getOfflineReplies(text, patientLang);
+    // 1. Instant feel: immediately display offline contextual role replies (0ms delay)
+    roleReplies = getOfflineRoleReplies(text, patientLang);
     isLoadingReplies = true;
-    render();
+    updateChatBoardInPlace();
 
     // 2. Throttle: ignore concurrent duplicate requests
     if (isAiRequestInFlight) return;
@@ -143,20 +150,27 @@ export function startConversation(app) {
         profile: memory,
         language: patientLang
       });
-      if (Array.isArray(aiReplies) && aiReplies.length > 0 && !isResting) {
-        replies = aiReplies;
+      if (aiReplies && typeof aiReplies === 'object' && !isResting) {
+        roleReplies = aiReplies;
       }
     } catch (err) {
       console.warn('AI prediction failed, keeping instant replies:', err);
     } finally {
       isLoadingReplies = false;
       isAiRequestInFlight = false;
-      render();
+      updateChatBoardInPlace();
     }
   }
 
   async function handleSelectPhrase(phraseText, kind = 'conversation', category = 'general') {
     if (!phraseText) return;
+
+    // Update stable board history and repeat memory
+    lastSpokenText = phraseText;
+    if (!spokenHistory.includes(phraseText)) {
+      spokenHistory.unshift(phraseText);
+      if (spokenHistory.length > 5) spokenHistory.pop();
+    }
 
     // Live proof calculation vs traditional letter-by-letter scanning
     const charCount = phraseText.trim().length;
@@ -214,9 +228,11 @@ export function startConversation(app) {
 
     if (mode !== 'chat') {
       mode = 'chat';
+      chatMounted = false;
+      render();
+    } else {
+      updateChatBoardInPlace();
     }
-    // Turn-based rhythm: After a reply is spoken, keep the reply tiles as they are until the next aac:heard (no auto-refresh)
-    render();
   }
 
   function handleHomeAction(item) {
@@ -251,8 +267,8 @@ export function startConversation(app) {
   function togglePatientLanguage() {
     patientLang = patientLang === 'en-IN' ? 'hi-IN' : 'en-IN';
     listener.setLanguage(patientLang);
-    replies = getOfflineReplies(heardText || '', patientLang);
-    render();
+    roleReplies = getOfflineRoleReplies(heardText || '', patientLang);
+    updateChatBoardInPlace();
   }
 
   function toggleListenerLanguage() {
@@ -316,10 +332,35 @@ export function startConversation(app) {
     } else if (action === 'fatigue-rest') {
       fatigueAlert = null;
       handleSelectPhrase("I am feeling tired. I'd like to rest my eyes.", 'fatigue', 'health');
+    } else if (action === 'core-yes') {
+      handleSelectPhrase(patientLang.startsWith('hi') ? 'हाँ' : 'Yes', 'affirmation', 'core');
+    } else if (action === 'core-no') {
+      handleSelectPhrase(patientLang.startsWith('hi') ? 'नहीं' : 'No', 'refusal', 'core');
+    } else if (action === 'core-wait') {
+      handleSelectPhrase(patientLang.startsWith('hi') ? 'कृपया प्रतीक्षा करें' : 'Please wait a moment', 'wait', 'core');
+    } else if (action === 'core-repeat') {
+      if (lastSpokenText) {
+        handleSelectPhrase(lastSpokenText, 'repeat', 'core');
+      }
+    } else if (action === 'history-repeat') {
+      if (value) {
+        handleSelectPhrase(value, 'history', 'core');
+      }
+    } else if (action === 'pinned-phrase') {
+      if (value) {
+        handleSelectPhrase(value, 'pinned', 'core');
+      }
+    } else if (action === 'toggle-pin') {
+      const role = target.dataset.role;
+      const text = target.dataset.text || roleReplies[role]?.text;
+      const tag = target.dataset.tag || roleReplies[role]?.tag || 'Pinned';
+      pinnedReplies = togglePinnedReply(role, text, tag);
+      updateChatBoardInPlace();
     } else if (action === 'reply') {
       handleSelectPhrase(value || target.querySelector('.conv-tile-text')?.textContent || target.textContent);
     } else if (action === 'nav-topics') {
       mode = 'topics';
+      chatMounted = false;
       render();
     } else if (action === 'topic-select') {
       activeTopic = TOPICS.find((t) => t.id === value) || null;
@@ -334,9 +375,11 @@ export function startConversation(app) {
       }
     } else if (action === 'nav-categories') {
       mode = 'categories';
+      chatMounted = false;
       render();
     } else if (action === 'nav-type' || action === 'nav-spell') {
       mode = 'type';
+      chatMounted = false;
       fetchTypePredictions(typeBuffer);
       render();
     } else if (action === 'type-key') {
@@ -391,6 +434,7 @@ export function startConversation(app) {
         mode = 'topics';
       } else {
         mode = 'chat';
+        chatMounted = false;
       }
       render();
     } else if (action === 'category-select') {
@@ -415,6 +459,7 @@ export function startConversation(app) {
         handleSelectPhrase(spellEngine.buffer.trim(), 'spell', 'keyboard');
         spellEngine.clear();
         mode = 'chat';
+        chatMounted = false;
         render();
       }
     } else if (action === 'spell-whatsapp') {
@@ -442,20 +487,28 @@ export function startConversation(app) {
       render();
     } else if (action === 'open-profile') {
       mode = 'profile';
+      chatMounted = false;
       render();
     } else if (action === 'close-profile') {
       mode = 'chat';
+      chatMounted = false;
       render();
     } else if (action === 'open-summary') {
       openSummaryView();
     } else if (action === 'close-summary') {
       mode = 'chat';
+      chatMounted = false;
       render();
     }
   }
 
   // Double-fire prevention: gaze-select sets timestamp and suppresses click on same target within 500ms
   function onGazeSelect(e) {
+    const pinBtn = e.target.closest('.conv-pin-btn');
+    if (pinBtn) {
+      handleAction(pinBtn);
+      return;
+    }
     const target = e.target.closest('[data-gaze-target]');
     if (!target) return;
     lastGazeSelectTime = performance.now();
@@ -464,6 +517,12 @@ export function startConversation(app) {
   }
 
   function onClick(e) {
+    const pinBtn = e.target.closest('.conv-pin-btn');
+    if (pinBtn) {
+      e.stopPropagation();
+      handleAction(pinBtn);
+      return;
+    }
     const target = e.target.closest('[data-gaze-target]');
     if (!target) return;
     const now = performance.now();
@@ -476,10 +535,167 @@ export function startConversation(app) {
   app.addEventListener('gaze-select', onGazeSelect);
   app.addEventListener('click', onClick);
 
+  // In-place stable board updater: mutates DOM nodes without recreation, preserving Team A dwell tracking
+  function updateChatBoardInPlace() {
+    if (mode !== 'chat' || isEmergency) {
+      render();
+      return;
+    }
+
+    const board = app.querySelector('.conv-board');
+    if (!board) {
+      render();
+      return;
+    }
+
+    const isHi = patientLang.startsWith('hi');
+
+    // 1. Update heard text in top bar
+    const heardEl = app.querySelector('.conv-heard-text');
+    if (heardEl) {
+      const displayTxt = heardText || (isListening ? 'Listening for speech...' : 'Microphone paused');
+      if (heardEl.textContent.trim() !== displayTxt) {
+        heardEl.textContent = displayTxt;
+      }
+    }
+
+    const micDot = app.querySelector('.conv-mic-dot');
+    if (micDot) {
+      micDot.classList.toggle('active', isListening);
+    }
+
+    const loadingPill = app.querySelector('.conv-loading-pill');
+    if (loadingPill) {
+      loadingPill.style.display = isLoadingReplies ? 'inline-block' : 'none';
+    }
+
+    // 2. Update Core Zone Repeat Tile
+    const repeatTile = app.querySelector('#tile-repeat');
+    if (repeatTile) {
+      repeatTile.dataset.value = lastSpokenText || '';
+      const textSpan = repeatTile.querySelector('.conv-tile-text');
+      if (textSpan) {
+        const repeatLabel = isHi ? '🔁 दोहराएं' : '🔁 Repeat';
+        textSpan.textContent = lastSpokenText ? `${repeatLabel}: "${lastSpokenText}"` : repeatLabel;
+      }
+    }
+
+    // 3. Update History Strip
+    const h1Tile = app.querySelector('#tile-hist-0');
+    const h2Tile = app.querySelector('#tile-hist-1');
+    const h3Tile = app.querySelector('#tile-hist-2');
+    const hist = [h1Tile, h2Tile, h3Tile];
+    for (let i = 0; i < 3; i++) {
+      const el = hist[i];
+      if (el) {
+        const phrase = spokenHistory[i] || '';
+        el.dataset.value = phrase;
+        el.style.opacity = phrase ? '1' : '0.4';
+        const txt = el.querySelector('.conv-tile-text');
+        if (txt) {
+          txt.textContent = phrase ? `🕒 "${phrase}"` : `🕒 (Empty)`;
+        }
+      }
+    }
+
+    // 4. Update Pinned phrase in aux row
+    const pinnedTile = app.querySelector('#tile-pinned');
+    if (pinnedTile) {
+      const pinnedKeys = Object.keys(pinnedReplies);
+      const firstPinned = pinnedKeys.length > 0 ? pinnedReplies[pinnedKeys[0]] : null;
+      if (firstPinned) {
+        pinnedTile.dataset.value = firstPinned.text;
+        pinnedTile.style.opacity = '1';
+        const txt = pinnedTile.querySelector('.conv-tile-text');
+        if (txt) txt.textContent = `📌 "${firstPinned.text}"`;
+      } else {
+        pinnedTile.dataset.value = '';
+        pinnedTile.style.opacity = '0.5';
+        const txt = pinnedTile.querySelector('.conv-tile-text');
+        if (txt) txt.textContent = `📌 (Pin phrases)`;
+      }
+    }
+
+    // 5. Update Fixed Role Slots in place
+    const roles = ['agree', 'decline', 'need', 'feeling', 'ask_back'];
+    for (const role of roles) {
+      const slotEl = app.querySelector(`#slot-${role}`);
+      if (!slotEl) continue;
+
+      const isPinned = !!pinnedReplies[role];
+      const data = isPinned ? pinnedReplies[role] : roleReplies[role];
+      if (!data) continue;
+
+      const text = data.text;
+      const tag = isPinned ? '📌 PINNED' : data.tag;
+
+      slotEl.classList.toggle('is-pinned', isPinned);
+      slotEl.dataset.value = text;
+      slotEl.dataset.role = role;
+      slotEl.dataset.text = text;
+      slotEl.dataset.tag = tag;
+
+      const textEl = slotEl.querySelector('.conv-tile-text');
+      if (textEl && textEl.textContent !== text) {
+        textEl.textContent = text;
+      }
+      const tagEl = slotEl.querySelector('.conv-tile-tag');
+      if (tagEl && tagEl.textContent !== tag) {
+        tagEl.textContent = tag;
+      }
+
+      const pinBtn = slotEl.querySelector('.conv-pin-btn');
+      if (pinBtn) {
+        pinBtn.dataset.role = role;
+        pinBtn.dataset.text = text;
+        pinBtn.dataset.tag = data.tag || 'Pinned';
+        pinBtn.textContent = isPinned ? '📌' : '📍';
+        pinBtn.title = isPinned ? 'Click to unpin' : 'Click to pin permanently';
+      }
+    }
+
+    // Slot 6: Something Else
+    const slotOther = app.querySelector('#slot-other');
+    if (slotOther) {
+      const otherTxt = slotOther.querySelector('.conv-tile-text');
+      if (otherTxt) {
+        otherTxt.textContent = isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else';
+      }
+    }
+
+    // Update audio button in sidebar
+    const audioBtn = app.querySelector('.conv-tile-audio');
+    if (audioBtn) {
+      if (isAudioStopped) {
+        audioBtn.dataset.action = 'audio-listen';
+        audioBtn.style.borderColor = '#00e676';
+        audioBtn.style.background = 'rgba(0,230,118,0.12)';
+        const tag = audioBtn.querySelector('.conv-tile-tag');
+        if (tag) tag.textContent = 'Audio';
+        const txt = audioBtn.querySelector('.conv-tile-text');
+        if (txt) txt.textContent = '▶️ Listen';
+      } else {
+        audioBtn.dataset.action = 'audio-stop';
+        audioBtn.style.borderColor = '#ff9800';
+        audioBtn.style.background = 'rgba(255,152,0,0.12)';
+        const tag = audioBtn.querySelector('.conv-tile-tag');
+        if (tag) tag.textContent = 'Audio';
+        const txt = audioBtn.querySelector('.conv-tile-text');
+        if (txt) txt.textContent = '⏹️ Stop';
+      }
+    }
+  }
+
   function render() {
     // Accessibility modifier classes
     app.classList.toggle('contrast-high', isHighContrast);
     app.classList.toggle('text-large', isLargeText);
+
+    // If already mounted in chat mode, mutate DOM in-place without replacing elements
+    if (mode === 'chat' && chatMounted && app.querySelector('.conv-board')) {
+      updateChatBoardInPlace();
+      return;
+    }
 
     const isHi = patientLang.startsWith('hi');
     const listenerObj = LISTENER_LANGUAGES.find((l) => l.code === listenerLang) || LISTENER_LANGUAGES[0];
@@ -872,21 +1088,104 @@ export function startConversation(app) {
     let mainContentHtml = '';
 
     if (mode === 'chat') {
-      // 2x3 Grid of Big Dynamic Reply Tiles
+      const firstPinnedKey = Object.keys(pinnedReplies)[0];
+      const firstPinnedText = firstPinnedKey ? pinnedReplies[firstPinnedKey].text : '';
+
       mainContentHtml = `
-        <div class="conv-grid-container">
-          ${replies
-            .slice(0, 6)
-            .map(
-              (r) => `
-            <button class="conv-tile" data-gaze-target data-action="reply" data-value="${escapeHtml(r.text)}">
-              <span class="conv-tile-tag">${escapeHtml(r.tag || r.type || 'Reply')}</span>
-              <span class="conv-tile-text">${escapeHtml(r.text)}</span>
+        <div class="conv-board">
+          <!-- 1. Fixed Core Zone (Yes, No, Wait/Stop, Repeat Last) -->
+          <div class="conv-core-zone">
+            <button class="conv-tile conv-tile-core core-yes" data-gaze-target data-action="core-yes">
+              <span class="conv-tile-tag">Affirm</span>
+              <span class="conv-tile-text">${isHi ? '✅ हाँ' : '✅ Yes'}</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-          `
-            )
-            .join('')}
+            <button class="conv-tile conv-tile-core core-no" data-gaze-target data-action="core-no">
+              <span class="conv-tile-tag">Refuse</span>
+              <span class="conv-tile-text">${isHi ? '❌ नहीं' : '❌ No'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-core core-wait" data-gaze-target data-action="core-wait">
+              <span class="conv-tile-tag">Hold On</span>
+              <span class="conv-tile-text">${isHi ? '⏳ रुकिए' : '⏳ Please wait'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-core core-repeat" id="tile-repeat" data-gaze-target data-action="core-repeat" data-value="${escapeHtml(lastSpokenText)}">
+              <span class="conv-tile-tag">Repeat</span>
+              <span class="conv-tile-text">${escapeHtml(isHi ? '🔁 दोहराएं: ' + (lastSpokenText || '') : '🔁 Repeat: ' + (lastSpokenText || 'Nothing yet'))}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+
+          <!-- 2. Pinned Phrase & History Strip (Last 3 Spoken) -->
+          <div class="conv-aux-row">
+            <button class="conv-tile conv-tile-pinned" id="tile-pinned" data-gaze-target data-action="pinned-phrase" data-value="${escapeHtml(firstPinnedText)}" title="Pinned Phrase">
+              <span class="conv-tile-text">${firstPinnedText ? '📌 ' + escapeHtml(firstPinnedText) : '📌 (Pin phrases)'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-history" id="tile-hist-0" data-gaze-target data-action="history-repeat" data-value="${escapeHtml(spokenHistory[0] || '')}">
+              <span class="conv-tile-text">🕒 ${escapeHtml(spokenHistory[0] || '(Empty)')}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-history" id="tile-hist-1" data-gaze-target data-action="history-repeat" data-value="${escapeHtml(spokenHistory[1] || '')}">
+              <span class="conv-tile-text">🕒 ${escapeHtml(spokenHistory[1] || '(Empty)')}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-history" id="tile-hist-2" data-gaze-target data-action="history-repeat" data-value="${escapeHtml(spokenHistory[2] || '')}">
+              <span class="conv-tile-text">🕒 ${escapeHtml(spokenHistory[2] || '(Empty)')}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+
+          <!-- 3. Fixed Role Slots (Agree, Decline, Need, Feeling, Ask Back, Something Else) -->
+          <div class="conv-role-grid">
+            <!-- Slot 1: Agree -->
+            <div class="conv-tile conv-tile-role ${pinnedReplies.agree ? 'is-pinned' : ''}" id="slot-agree" data-gaze-target data-action="reply" data-role="agree" data-value="${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}">
+              <span class="conv-tile-tag">${pinnedReplies.agree ? '📌 PINNED' : escapeHtml(roleReplies.agree.tag)}</span>
+              <span class="conv-tile-text">${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}</span>
+              <button class="conv-pin-btn" data-action="toggle-pin" data-role="agree" data-text="${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}" data-tag="${escapeHtml(roleReplies.agree.tag)}" title="${pinnedReplies.agree ? 'Unpin' : 'Pin'}">${pinnedReplies.agree ? '📌' : '📍'}</button>
+              <div class="conv-tile-dwell-ring"></div>
+            </div>
+
+            <!-- Slot 2: Decline -->
+            <div class="conv-tile conv-tile-role ${pinnedReplies.decline ? 'is-pinned' : ''}" id="slot-decline" data-gaze-target data-action="reply" data-role="decline" data-value="${escapeHtml((pinnedReplies.decline || roleReplies.decline).text)}">
+              <span class="conv-tile-tag">${pinnedReplies.decline ? '📌 PINNED' : escapeHtml(roleReplies.decline.tag)}</span>
+              <span class="conv-tile-text">${escapeHtml((pinnedReplies.decline || roleReplies.decline).text)}</span>
+              <button class="conv-pin-btn" data-action="toggle-pin" data-role="decline" data-text="${escapeHtml((pinnedReplies.decline || roleReplies.decline).text)}" data-tag="${escapeHtml(roleReplies.decline.tag)}" title="${pinnedReplies.decline ? 'Unpin' : 'Pin'}">${pinnedReplies.decline ? '📌' : '📍'}</button>
+              <div class="conv-tile-dwell-ring"></div>
+            </div>
+
+            <!-- Slot 3: Need -->
+            <div class="conv-tile conv-tile-role ${pinnedReplies.need ? 'is-pinned' : ''}" id="slot-need" data-gaze-target data-action="reply" data-role="need" data-value="${escapeHtml((pinnedReplies.need || roleReplies.need).text)}">
+              <span class="conv-tile-tag">${pinnedReplies.need ? '📌 PINNED' : escapeHtml(roleReplies.need.tag)}</span>
+              <span class="conv-tile-text">${escapeHtml((pinnedReplies.need || roleReplies.need).text)}</span>
+              <button class="conv-pin-btn" data-action="toggle-pin" data-role="need" data-text="${escapeHtml((pinnedReplies.need || roleReplies.need).text)}" data-tag="${escapeHtml(roleReplies.need.tag)}" title="${pinnedReplies.need ? 'Unpin' : 'Pin'}">${pinnedReplies.need ? '📌' : '📍'}</button>
+              <div class="conv-tile-dwell-ring"></div>
+            </div>
+
+            <!-- Slot 4: Feeling -->
+            <div class="conv-tile conv-tile-role ${pinnedReplies.feeling ? 'is-pinned' : ''}" id="slot-feeling" data-gaze-target data-action="reply" data-role="feeling" data-value="${escapeHtml((pinnedReplies.feeling || roleReplies.feeling).text)}">
+              <span class="conv-tile-tag">${pinnedReplies.feeling ? '📌 PINNED' : escapeHtml(roleReplies.feeling.tag)}</span>
+              <span class="conv-tile-text">${escapeHtml((pinnedReplies.feeling || roleReplies.feeling).text)}</span>
+              <button class="conv-pin-btn" data-action="toggle-pin" data-role="feeling" data-text="${escapeHtml((pinnedReplies.feeling || roleReplies.feeling).text)}" data-tag="${escapeHtml(roleReplies.feeling.tag)}" title="${pinnedReplies.feeling ? 'Unpin' : 'Pin'}">${pinnedReplies.feeling ? '📌' : '📍'}</button>
+              <div class="conv-tile-dwell-ring"></div>
+            </div>
+
+            <!-- Slot 5: Ask Back -->
+            <div class="conv-tile conv-tile-role ${pinnedReplies.ask_back ? 'is-pinned' : ''}" id="slot-ask_back" data-gaze-target data-action="reply" data-role="ask_back" data-value="${escapeHtml((pinnedReplies.ask_back || roleReplies.ask_back).text)}">
+              <span class="conv-tile-tag">${pinnedReplies.ask_back ? '📌 PINNED' : escapeHtml(roleReplies.ask_back.tag)}</span>
+              <span class="conv-tile-text">${escapeHtml((pinnedReplies.ask_back || roleReplies.ask_back).text)}</span>
+              <button class="conv-pin-btn" data-action="toggle-pin" data-role="ask_back" data-text="${escapeHtml((pinnedReplies.ask_back || roleReplies.ask_back).text)}" data-tag="${escapeHtml(roleReplies.ask_back.tag)}" title="${pinnedReplies.ask_back ? 'Unpin' : 'Pin'}">${pinnedReplies.ask_back ? '📌' : '📍'}</button>
+              <div class="conv-tile-dwell-ring"></div>
+            </div>
+
+            <!-- Slot 6: Something Else (Opens Keyboard) -->
+            <div class="conv-tile conv-tile-role" id="slot-other" data-gaze-target data-action="nav-type" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.08);">
+              <span class="conv-tile-tag">${isHi ? 'कीबोर्ड' : 'Keyboard'}</span>
+              <span class="conv-tile-text">${isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </div>
+          </div>
         </div>
       `;
     } else if (mode === 'topics') {
@@ -1057,6 +1356,10 @@ export function startConversation(app) {
         ${mainContentHtml}
       </div>
     `;
+
+    if (mode === 'chat') {
+      chatMounted = true;
+    }
 
     // Hook manual text input if present
     const btnSubmit = app.querySelector('#btn-submit-manual');
