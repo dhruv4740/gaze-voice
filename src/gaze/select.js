@@ -1,0 +1,87 @@
+// Target snapping + dwell. Pure logic (no DOM) so it can be unit-tested with fake rects.
+
+// ---- tuning ----
+export const SNAP_PX = 150; // snap to a target only if its rect is within this distance
+export const SWITCH_MARGIN_PX = 60; // another target must be this much closer to take over...
+export const SWITCH_MS = 150; // ...for this long
+export const GRACE_MS = 300; // a slip off the target shorter than this keeps dwell progress
+
+const distToRect = (p, r) => {
+  const dx = Math.max(r.left - p.x, 0, p.x - r.right);
+  const dy = Math.max(r.top - p.y, 0, p.y - r.bottom);
+  return Math.hypot(dx, dy);
+};
+
+// rects: [{ el, left, top, right, bottom }]. Returns the snapped element or null.
+export function createTargeter({ snap = SNAP_PX, margin = SWITCH_MARGIN_PX, switchMs = SWITCH_MS } = {}) {
+  let cur = null;
+  let challenger = null;
+  let challengerSince = 0;
+
+  return {
+    update(point, rects, now) {
+      if (point.x < 0 || !rects.length) { cur = null; challenger = null; return null; }
+      let best = null; let bestD = Infinity; let curD = Infinity;
+      for (const r of rects) {
+        const d = distToRect(point, r);
+        if (d < bestD) { best = r; bestD = d; }
+        if (cur && r.el === cur) curD = d;
+      }
+      if (bestD > snap) { cur = null; challenger = null; return null; }
+      if (!cur || curD > snap) { cur = best.el; challenger = null; return cur; }
+      if (best.el === cur) { challenger = null; return cur; }
+      // clearly closer (or the point is inside the other one and not inside ours)
+      const clearer = curD - bestD > margin || (bestD === 0 && curD > 0);
+      if (!clearer) { challenger = null; return cur; }
+      if (challenger !== best.el) { challenger = best.el; challengerSince = now; }
+      else if (now - challengerSince >= switchMs) { cur = best.el; challenger = null; }
+      return cur;
+    },
+    center(el, rects) {
+      const r = rects.find((q) => q.el === el);
+      return r ? { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 } : null;
+    },
+  };
+}
+
+// Dwell on the targeter's element. Progress accumulates only while on target, and a slip
+// shorter than graceMs freezes it instead of resetting. After a selection the user must
+// look away (a different target, or none past the grace time) before it can fire again.
+export function createDwell({ graceMs = GRACE_MS, defaultMs = 1200 } = {}) {
+  let el = null;
+  let acc = 0;
+  let lastOn = 0;
+  let locked = null;
+  let last = null;
+
+  return {
+    // Returns { el, progress, fired }. el is the element currently being dwelled on.
+    update(target, now, dwellMsOf) {
+      const dt = last === null ? 0 : Math.min(now - last, 100);
+      last = now;
+      if (locked && target !== locked) locked = null;
+      if (target && target === locked) target = null;
+      if (target && target === el) {
+        acc += dt; lastOn = now;
+      } else if (el && now - lastOn <= graceMs) {
+        // slipping: keep el and its progress, ignore other targets until grace runs out
+      } else {
+        el = target; acc = 0; lastOn = now;
+      }
+      if (!el) return { el: null, progress: 0, fired: null };
+      const progress = Math.min(acc / (dwellMsOf(el) || defaultMs), 1);
+      if (progress >= 1) {
+        const done = el; locked = done; el = null; acc = 0;
+        return { el: null, progress: 0, fired: done };
+      }
+      return { el, progress, fired: null };
+    },
+    // Blink: select the element being dwelled on right now.
+    select() {
+      const done = el;
+      if (done) { locked = done; el = null; acc = 0; }
+      return done;
+    },
+    get el() { return el; },
+  };
+}

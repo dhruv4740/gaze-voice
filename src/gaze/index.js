@@ -1,7 +1,8 @@
 // Team A (Opus + Sonnet) owns everything in src/gaze/.
 // Modes: mouse (placeholder), eyes (WebGazer). Contract: docs/CONTRACT.md.
 import './gaze.css';
-import { createPointSmoother } from './smoothing.js';
+import { createPointSmoother, PRESETS } from './smoothing.js';
+import { createTargeter, createDwell } from './select.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 
@@ -11,6 +12,10 @@ export function startGaze({ mode = 'mouse', root }) {
   const cursor = document.createElement('div');
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
+  // faint dot at the smoothed (unsnapped) gaze point
+  const rawDot = document.createElement('div');
+  rawDot.id = 'gaze-raw';
+  root.appendChild(rawDot);
 
   // corner control stack: status, mode switcher, recalibrate, blink toggle, stats toggle
   const ui = document.createElement('div');
@@ -47,18 +52,18 @@ export function startGaze({ mode = 'mouse', root }) {
   const blink = createBlinkDetector({
     onChange: (closed) => {
       cursor.classList.toggle('closed', closed);
-      if (closed) blinkTarget = current;
+      if (closed) blinkTarget = dwell.el;
     },
     onLongBlink: () => {
-      const el = blinkTarget || current;
-      if (el && el.isConnected && blinkBox.checked) selectNow(el);
+      const el = dwell.el || (blinkTarget && blinkTarget.isConnected ? blinkTarget : null);
+      if (el && blinkBox.checked) { dwell.select(); selectNow(el); }
     },
   });
 
   let point = { x: -1, y: -1 };
   let calibrating = false;
   const setPoint = (x, y) => { point = { x, y }; };
-  const smoother = createPointSmoother();
+  const smoother = createPointSmoother(PRESETS[mode] || PRESETS.head);
   // raw tracker samples go through One Euro + dead zone; (-1,-1) means "no face"
   const setRaw = (x, y) => {
     if (x < 0) { smoother.reset(); setPoint(-1, -1); return; }
@@ -66,9 +71,23 @@ export function startGaze({ mode = 'mouse', root }) {
     setPoint(p.x, p.y);
   };
 
+  // ?jitter=1 (mouse mode): fake a noisy camera tracker (gaussian noise + outlier jumps)
+  // through the real smoothing + snapping path, to test that targets hold.
+  const jitter = params.get('jitter') === '1';
+  let mouse = { x: -1, y: -1 };
   window.addEventListener('mousemove', (e) => {
-    if (mode === 'mouse') setPoint(e.clientX, e.clientY);
+    mouse = { x: e.clientX, y: e.clientY };
+    if (mode === 'mouse' && !jitter) setPoint(mouse.x, mouse.y);
   });
+  if (jitter && mode === 'mouse') {
+    const g = () => Math.sqrt(-2 * Math.log(Math.random() + 1e-9)) * Math.cos(2 * Math.PI * Math.random());
+    setInterval(() => {
+      if (mouse.x < 0) return;
+      const out = Math.random() < 0.05;
+      setRaw(mouse.x + g() * 50 + (out ? (Math.random() - 0.5) * 500 : 0),
+        mouse.y + g() * 50 + (out ? (Math.random() - 0.5) * 500 : 0));
+    }, 33);
+  }
 
   if (mode === 'eyes' || mode === 'head' || mode === 'iris') {
     showStatus('starting camera…');
@@ -116,38 +135,59 @@ export function startGaze({ mode = 'mouse', root }) {
     mode = 'mouse';
   }
 
-  let current = null;
-  let dwellStart = 0;
+  const targeter = createTargeter();
+  const dwell = createDwell();
+  let hovered = null;
 
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
     el.dispatchEvent(new CustomEvent('gaze-select', { bubbles: true }));
     el.classList.remove('gaze-hover');
     el.style.setProperty('--dwell', 0);
-    if (current === el) current = null;
+    if (hovered === el) hovered = null;
+  }
+
+  function collectRects() {
+    const rects = [];
+    for (const el of document.querySelectorAll('[data-gaze-target]')) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) rects.push({ el, left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    }
+    return rects;
   }
 
   function tick(now) {
-    cursor.style.left = `${point.x}px`;
-    cursor.style.top = `${point.y}px`;
     window.dispatchEvent(new CustomEvent('gaze:point', { detail: point }));
 
-    const hit = calibrating ? null : document.elementFromPoint(point.x, point.y);
-    const target = hit && hit.closest('[data-gaze-target]');
-
-    if (target !== current) {
-      if (current) { current.classList.remove('gaze-hover'); current.style.setProperty('--dwell', 0); }
-      current = target;
-      dwellStart = now;
-      if (current) current.classList.add('gaze-hover');
-    } else if (current) {
-      const dwellMs = Number(current.dataset.gazeDwell) || DEFAULT_DWELL_MS;
-      const progress = Math.min((now - dwellStart) / dwellMs, 1);
-      current.style.setProperty('--dwell', progress);
-      if (progress >= 1) {
-        selectNow(current);
+    let target = null;
+    let rects = [];
+    const plainMouse = mode === 'mouse' && !jitter; // exact hit-testing, no snapping
+    if (!calibrating) {
+      if (plainMouse) {
+        const hit = document.elementFromPoint(point.x, point.y);
+        target = hit && hit.closest('[data-gaze-target]');
+      } else {
+        rects = collectRects();
+        target = targeter.update(point, rects, now);
       }
     }
+
+    const r = dwell.update(target, now, (el) => Number(el.dataset.gazeDwell));
+    if (hovered && hovered !== r.el) { hovered.classList.remove('gaze-hover'); hovered.style.setProperty('--dwell', 0); hovered = null; }
+    if (r.el) {
+      hovered = r.el;
+      r.el.classList.add('gaze-hover');
+      r.el.style.setProperty('--dwell', r.progress);
+    }
+    if (r.fired) selectNow(r.fired);
+
+    // cursor: centre of the snapped target for camera modes, else the pointer itself
+    const c = !plainMouse && target ? targeter.center(target, rects) : null;
+    const shown = c || point;
+    cursor.style.left = `${shown.x}px`;
+    cursor.style.top = `${shown.y}px`;
+    rawDot.style.left = `${point.x}px`;
+    rawDot.style.top = `${point.y}px`;
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
