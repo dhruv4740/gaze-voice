@@ -12,6 +12,53 @@ npm run dev
 ```
 Open `/?mode=mouse` (hover = look), `/?mode=eyes` (WebGazer eye tracking) or `/?mode=head` (MediaPipe head pointer).
 
+## How to use (walkthrough)
+
+Live: https://gaze-voice-production.up.railway.app (or http://localhost:5173 locally).
+
+1. **Pick an input.** On first open, a picker asks how the patient will point: mouse, head, eyes (iris), hand, or scan with a switch or blink. Combos like head + hand are allowed. You can also skip the picker with a URL such as `/?mode=head`. Head mode is the most reliable on a normal webcam.
+2. **Setup walkthrough.** Three full-screen steps, about 3.5 s each, explain how to sit, look at the dots, and select by holding your look. You can skip them, either by looking at Skip or by clicking it.
+3. **Calibrate.** Look at each dot until it moves. The results screen shows the accuracy in pixels. Choose **Done** or **Recalibrate**; both work by gaze as well as by click.
+4. **Enter a question.** The caregiver can speak it (the mic listens), type it under **Menu → Ask**, or send it from the caregiver phone.
+5. **Answer.** Six reply tiles appear, and each kind of answer always sits in the same slot: agree, decline, need, feeling, ask back, other. Hold your look on a tile for 1.2 s and the ring fills, then the reply is spoken aloud and sent to the caregiver phone.
+6. **Connect the caregiver phone.** Open **Controls → Caregiver QR** and scan it with the phone. The phone then shows spoken replies, requests and fatigue warnings, and emergencies appear full-screen in red with sound and vibration.
+
+### Main screen buttons
+| Button | What it does |
+|---|---|
+| Reply tiles (6) | AI-predicted replies to the last question. Looking at one speaks it. Pin keeps a favourite reply in place. |
+| Yes / No / Wait | Fixed quick answers that never move. |
+| Keyboard | Gaze keyboard with word predictions. **Speak** says the typed text aloud. Backspace, Clear and Space work as usual, and WhatsApp shares the typed text. |
+| More | Pain map, history, pinned replies, tone, topics/categories, home & nurse requests, and **Stop Listening** (turns the mic off). |
+| Emergency | Alarm on the laptop plus a full-screen red alert on the caregiver phone. It works even in rest mode. |
+| Menu | Caregiver settings: type a question (Ask), patient language, listener language (Hindi, Marathi, Gujarati, Tamil, Bengali, Telugu; replies are translated before being spoken), high contrast, text size, demo mode, patient profile & meds, daily medical summary. |
+
+### More panel
+- **Pain:** choose a body zone, then a 1–10 level. It speaks a sentence like "My back hurts, moderate, 6 out of 10."
+- **History / Pinned:** recently spoken replies and saved favourites, for speaking again.
+- **Tone:** choose how replies sound (gentle, firm and so on).
+- **Topics / Categories:** ready-made phrases grouped by need (food, comfort, family and so on).
+- **Home & Nurse:** lights, fan and call-nurse requests, which are spoken and also sent to the phone.
+
+### Controls panel (bottom right)
+| Control | What it does |
+|---|---|
+| Mode dropdown / Change input | Switch the tracker, or reopen the input picker. |
+| Chips (Eyes, Dwell, Blink, Switch) | Show which inputs are active. |
+| Pause | Rest mode: the screen dims and looking selects nothing. Hold your look on **Wake** for 2 s to resume. Rest also starts by itself after a reply or after 20 s idle. |
+| X-ray | Live view of the tracking pipeline (raw point, filtered point, snapping, calibration error). |
+| Night | Warm low-light mode for dark rooms. If the camera can't see well enough, it falls back to scan mode. |
+| dwell slider | How long you must look to select (default 1.2 s). |
+| pause slider | Cool-down after a selection so nothing fires twice (default 1.5 s). |
+| Caregiver QR | QR code that opens the phone page. |
+| Stats | Number of selections, average time, words per minute, and how the learning is improving. |
+| blink select | Allow a deliberate blink to select. |
+| sens | Pointer sensitivity for head mode. |
+| Recalibrate | Run calibration again. |
+
+### Keyboard shortcuts (caregiver)
+Shift+X X-ray · Shift+N night · Shift+P rest · Shift+C recalibrate · Shift+R reset stats and learning · Shift+H hide controls · Shift+[ / ] sensitivity.
+
 ## Architecture
 | Path | What | Owner |
 |---|---|---|
