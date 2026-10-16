@@ -1,6 +1,6 @@
 // Groq API integration for contextual AAC reply prediction
 
-import { getOfflineReplies } from './categories.js';
+import { getOfflineReplies, getOfflineRoleReplies } from './categories.js';
 import { getCompactMemoryPrompt, rankRepliesByMemory } from './memory.js';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -19,7 +19,7 @@ export async function predictReplies({ utterance, history = [], profile, languag
 
   if (!apiKey || apiKey.trim() === '') {
     console.warn('VITE_GROQ_API_KEY not configured. Using offline AAC reply fallback.');
-    return rankRepliesByMemory(getOfflineReplies(utterance, language));
+    return getOfflineRoleReplies(utterance, language);
   }
 
   const timeOfDay = getTimeOfDay();
@@ -32,25 +32,21 @@ Time of day: ${timeOfDay}
 Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
 
 Rules:
-1. Based on what was just heard, conversation history, and profile, output exactly 6 reply options for the patient.
-2. Every reply MUST be concise and strictly 8 words or fewer (<= 8 words).
-3. The 6 replies MUST match these 6 categories in order:
-   - "yes": Affirmation or agreement
-   - "no": Polite refusal or negation
-   - "need": Practical or physical care need
-   - "feeling": Emotional state or physical sensation
-   - "question": Counter-question back to the speaker
-   - "surprise": A contextual, warm, or personal remark
-4. Output JSON strictly adhering to this format:
+1. Based on what was just heard, conversation history, and profile, output exactly 1 concise reply for each of these 5 semantic roles:
+   - "agree": Affirmation, acceptance, or positive response
+   - "decline": Polite refusal, declining, or negative response
+   - "need": Practical, physical, or medical care need related to the question
+   - "feeling": Physical comfort/sensation or emotional state
+   - "ask_back": Reciprocal question or counter-question back to the speaker
+2. Every reply MUST be strictly 8 words or fewer (<= 8 words).
+3. Output JSON strictly adhering to this format with these exact keys:
 {
-  "replies": [
-    { "type": "yes", "tag": "Yes", "text": "..." },
-    { "type": "no", "tag": "No", "text": "..." },
-    { "type": "need", "tag": "Need", "text": "..." },
-    { "type": "feeling", "tag": "Feeling", "text": "..." },
-    { "type": "question", "tag": "Question", "text": "..." },
-    { "type": "surprise", "tag": "Note", "text": "..." }
-  ]
+  "agree": "...",
+  "decline": "...",
+  "need": "...",
+  "feeling": "...",
+  "ask_back": "...",
+  "other": "..."
 }`;
 
   // Format last ~6 turns
@@ -64,6 +60,8 @@ Rules:
     ...recentHistory,
     { role: 'user', content: `Current heard speech: "${utterance || 'Hello, how are you?'}"` }
   ];
+
+  const fallback = getOfflineRoleReplies(utterance, language);
 
   try {
     const controller = new AbortController();
@@ -96,22 +94,7 @@ Rules:
     const data = await res.json();
     const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
 
-    if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
-      // Validate and clean each reply to <= 8 words
-      const cleaned = parsed.replies.slice(0, 6).map((r, i) => {
-        let text = (r.text || '').trim();
-        const words = text.split(/\s+/);
-        if (words.length > 8) text = words.slice(0, 8).join(' ');
-        return {
-          type: r.type || 'reply',
-          tag: r.tag || (['Yes', 'No', 'Need', 'Feeling', 'Question', 'Note'][i] || 'Reply'),
-          text
-        };
-      });
-      return rankRepliesByMemory(cleaned);
-    }
-
-    return await predictRepliesWithGemini({ utterance, history, profile, language });
+    return formatRoleReplies(parsed, fallback, language);
   } catch (err) {
     console.warn('Groq prediction failed or exceeded 4s, falling back to Gemini:', err);
     return await predictRepliesWithGemini({ utterance, history, profile, language });
@@ -121,9 +104,10 @@ Rules:
 async function predictRepliesWithGemini({ utterance, history = [], profile, language = 'en-IN' }) {
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const geminiModel = import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest';
+  const fallback = getOfflineRoleReplies(utterance, language);
 
   if (!geminiKey || geminiKey.trim() === '') {
-    return getOfflineReplies(utterance, language);
+    return fallback;
   }
 
   const isHi = language.startsWith('hi');
@@ -139,25 +123,23 @@ Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
 Current heard speech: "${utterance || 'Hello, how are you?'}"
 Recent conversation context: ${history.slice(-4).map((t) => `${t.speaker}: ${t.text}`).join('; ')}
 
-Output a JSON object with a "replies" array of exactly 6 reply options for the patient, each strictly 8 words or fewer:
-1. "yes" (affirmation)
-2. "no" (polite refusal)
-3. "need" (physical or care need)
-4. "feeling" (emotion or state)
-5. "question" (counter-question)
-6. "surprise" (contextual remark)
+Output a JSON object with strictly 1 concise reply (8 words or fewer) for each of these keys:
+- "agree": Affirmation or agreement
+- "decline": Polite refusal or negation
+- "need": Practical or physical care need
+- "feeling": Emotional state or physical sensation
+- "ask_back": Counter-question back to the speaker
+- "other": Brief secondary option
 ${isHi ? 'CRITICAL: Reply texts must be in Hindi Devanagari script.' : ''}
 
 JSON format:
 {
-  "replies": [
-    { "type": "yes", "tag": "Yes", "text": "..." },
-    { "type": "no", "tag": "No", "text": "..." },
-    { "type": "need", "tag": "Need", "text": "..." },
-    { "type": "feeling", "tag": "Feeling", "text": "..." },
-    { "type": "question", "tag": "Question", "text": "..." },
-    { "type": "surprise", "tag": "Note", "text": "..." }
-  ]
+  "agree": "...",
+  "decline": "...",
+  "need": "...",
+  "feeling": "...",
+  "ask_back": "...",
+  "other": "..."
 }`;
 
   try {
@@ -190,7 +172,7 @@ JSON format:
 
     if (!res.ok) {
       console.warn(`Gemini fallback responded with ${res.status}. Using offline replies.`);
-      return getOfflineReplies(utterance, language);
+      return fallback;
     }
 
     const data = await res.json();
@@ -198,24 +180,65 @@ JSON format:
     rawText = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(rawText);
 
-    if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
-      const cleaned = parsed.replies.slice(0, 6).map((r, i) => {
-        let text = (r.text || '').trim();
-        const words = text.split(/\s+/);
-        if (words.length > 8) text = words.slice(0, 8).join(' ');
-        return {
-          type: r.type || 'reply',
-          tag: r.tag || (['Yes', 'No', 'Need', 'Feeling', 'Question', 'Note'][i] || 'Reply'),
-          text
-        };
-      });
-      return rankRepliesByMemory(cleaned);
-    }
+    return formatRoleReplies(parsed, fallback, language);
   } catch (err) {
     console.warn('Gemini fallback failed:', err);
   }
 
-  return getOfflineReplies(utterance, language);
+  return fallback;
+}
+
+function formatRoleReplies(rawParsed, fallback, language) {
+  const isHi = (language || '').startsWith('hi');
+  const clean = (val, maxWords = 8) => {
+    if (!val || typeof val !== 'string') return '';
+    const words = val.trim().split(/\s+/);
+    return words.slice(0, maxWords).join(' ');
+  };
+
+  const getVal = (key) => {
+    if (rawParsed && rawParsed[key]) return clean(rawParsed[key]);
+    if (rawParsed && Array.isArray(rawParsed.replies)) {
+      const idx = ['agree', 'decline', 'need', 'feeling', 'ask_back'].indexOf(key);
+      if (idx !== -1 && rawParsed.replies[idx]?.text) {
+        return clean(rawParsed.replies[idx].text);
+      }
+    }
+    return fallback[key]?.text || '';
+  };
+
+  return {
+    agree: {
+      role: 'agree',
+      tag: isHi ? 'सहमति' : 'Agree',
+      text: getVal('agree') || (isHi ? 'हाँ, बिल्कुल' : 'Yes, definitely.')
+    },
+    decline: {
+      role: 'decline',
+      tag: isHi ? 'अस्वीकार' : 'Decline',
+      text: getVal('decline') || (isHi ? 'नहीं, धन्यवाद' : 'No, thank you.')
+    },
+    need: {
+      role: 'need',
+      tag: isHi ? 'ज़रूरत' : 'Need',
+      text: getVal('need') || (isHi ? 'कृपया मदद कीजिए' : 'Please help me.')
+    },
+    feeling: {
+      role: 'feeling',
+      tag: isHi ? 'महसूस' : 'Feeling',
+      text: getVal('feeling') || (isHi ? 'मैं ठीक महसूस कर रहा हूँ' : 'I feel comfortable.')
+    },
+    ask_back: {
+      role: 'ask_back',
+      tag: isHi ? 'प्रश्न' : 'Ask Back',
+      text: getVal('ask_back') || (isHi ? 'आप कैसे हैं?' : 'How are you doing?')
+    },
+    other: {
+      role: 'other',
+      tag: isHi ? 'कीबोर्ड' : 'Keyboard',
+      text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else'
+    }
+  };
 }
 
 export async function predictWordCompletions(prefix, context = '') {

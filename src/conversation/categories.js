@@ -128,41 +128,43 @@ export const CATEGORIES = [
   }
 ];
 
-export function getOfflineReplies(utterance = '', lang = 'en-IN') {
+export function getOfflineRoleReplies(utterance = '', lang = 'en-IN') {
   const isHi = lang.startsWith('hi');
   const lower = utterance.toLowerCase();
 
-  // If question about sleep/feeling
   if (lower.includes('sleep') || lower.includes('soye') || lower.includes('feeling') || lower.includes('kaise')) {
-    return [
-      { type: 'yes', tag: 'Yes', text: isHi ? 'हाँ, अच्छी नींद आई' : 'Yes, I slept well.' },
-      { type: 'no', tag: 'No', text: isHi ? 'नहीं, ठीक से नहीं' : 'No, not very well.' },
-      { type: 'need', tag: 'Need', text: isHi ? 'कृपया तकिया ठीक कीजिए' : 'Please adjust my pillow.' },
-      { type: 'feeling', tag: 'Feeling', text: isHi ? 'थोड़ी थकान है' : 'Feeling a little tired.' },
-      { type: 'question', tag: 'Question', text: isHi ? 'आप कैसे हैं?' : 'How are you doing?' },
-      { type: 'surprise', tag: 'Note', text: isHi ? 'आज मौसम कैसा है?' : 'What is the weather today?' }
-    ];
+    return {
+      agree: { role: 'agree', tag: isHi ? 'सहमति' : 'Agree', text: isHi ? 'हाँ, अच्छी नींद आई' : 'Yes, I slept well.' },
+      decline: { role: 'decline', tag: isHi ? 'अस्वीकार' : 'Decline', text: isHi ? 'नहीं, ठीक से नहीं' : 'No, not very well.' },
+      need: { role: 'need', tag: isHi ? 'ज़रूरत' : 'Need', text: isHi ? 'कृपया तकिया ठीक कीजिए' : 'Please adjust my pillow.' },
+      feeling: { role: 'feeling', tag: isHi ? 'महसूस' : 'Feeling', text: isHi ? 'थोड़ी थकान है' : 'Feeling a little tired.' },
+      ask_back: { role: 'ask_back', tag: isHi ? 'प्रश्न' : 'Ask Back', text: isHi ? 'आप कैसे हैं?' : 'How are you doing?' },
+      other: { role: 'other', tag: isHi ? 'कीबोर्ड' : 'Keyboard', text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else' }
+    };
   }
 
-  // If question about food/water/pain
   if (lower.includes('water') || lower.includes('pani') || lower.includes('pain') || lower.includes('dard')) {
-    return [
-      { type: 'yes', tag: 'Yes', text: isHi ? 'हाँ, ज़रूर' : 'Yes, please.' },
-      { type: 'no', tag: 'No', text: isHi ? 'नहीं, अभी नहीं' : 'No, not right now.' },
-      { type: 'need', tag: 'Need', text: isHi ? 'पानी स्ट्रॉ से दीजिए' : 'Water with straw please.' },
-      { type: 'feeling', tag: 'Feeling', text: isHi ? 'गले में सूखापन है' : 'My throat is dry.' },
-      { type: 'question', tag: 'Question', text: isHi ? 'दवा का समय हुआ?' : 'Is it medicine time?' },
-      { type: 'surprise', tag: 'Note', text: isHi ? 'बस पंखा चला दीजिए' : 'Just turn on the fan.' }
-    ];
+    return {
+      agree: { role: 'agree', tag: isHi ? 'सहमति' : 'Agree', text: isHi ? 'हाँ, ज़रूर' : 'Yes, please.' },
+      decline: { role: 'decline', tag: isHi ? 'अस्वीकार' : 'Decline', text: isHi ? 'नहीं, अभी नहीं' : 'No, not right now.' },
+      need: { role: 'need', tag: isHi ? 'ज़रूरत' : 'Need', text: isHi ? 'पानी स्ट्रॉ से दीजिए' : 'Water with straw please.' },
+      feeling: { role: 'feeling', tag: isHi ? 'महसूस' : 'Feeling', text: isHi ? 'गले में सूखापन है' : 'My throat is dry.' },
+      ask_back: { role: 'ask_back', tag: isHi ? 'प्रश्न' : 'Ask Back', text: isHi ? 'दवा का समय हुआ?' : 'Is it medicine time?' },
+      other: { role: 'other', tag: isHi ? 'कीबोर्ड' : 'Keyboard', text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else' }
+    };
   }
 
-  // Default balanced 6-reply AAC set
-  return [
-    { type: 'yes', tag: 'Yes', text: isHi ? 'हाँ, बिल्कुल' : 'Yes, please.' },
-    { type: 'no', tag: 'No', text: isHi ? 'नहीं, अभी नहीं' : 'No, not now.' },
-    { type: 'need', tag: 'Need', text: isHi ? 'मुझे पानी चाहिए' : 'I need some water.' },
-    { type: 'feeling', tag: 'Feeling', text: isHi ? 'मैं ठीक महसूस कर रहा हूँ' : 'I feel comfortable.' },
-    { type: 'question', tag: 'Question', text: isHi ? 'क्या समय हुआ है?' : 'What time is it?' },
-    { type: 'surprise', tag: 'Note', text: isHi ? 'आपसे बात करके अच्छा लगा' : 'Good to talk to you.' }
-  ];
+  return {
+    agree: { role: 'agree', tag: isHi ? 'सहमति' : 'Agree', text: isHi ? 'हाँ, बिल्कुल' : 'Yes, definitely.' },
+    decline: { role: 'decline', tag: isHi ? 'अस्वीकार' : 'Decline', text: isHi ? 'नहीं, धन्यवाद' : 'No, thank you.' },
+    need: { role: 'need', tag: isHi ? 'ज़रूरत' : 'Need', text: isHi ? 'मुझे पानी चाहिए' : 'I need some water.' },
+    feeling: { role: 'feeling', tag: isHi ? 'महसूस' : 'Feeling', text: isHi ? 'मैं ठीक महसूस कर रहा हूँ' : 'I feel comfortable.' },
+    ask_back: { role: 'ask_back', tag: isHi ? 'प्रश्न' : 'Ask Back', text: isHi ? 'क्या समय हुआ है?' : 'What time is it?' },
+    other: { role: 'other', tag: isHi ? 'कीबोर्ड' : 'Keyboard', text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else' }
+  };
+}
+
+export function getOfflineReplies(utterance = '', lang = 'en-IN') {
+  const roleObj = getOfflineRoleReplies(utterance, lang);
+  return Object.values(roleObj);
 }
