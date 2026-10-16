@@ -408,7 +408,7 @@ export function startConversation(app) {
           <div class="conv-modal-card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
               <h2 style="margin:0; color:var(--conv-accent);">👋 Welcome to Gaze Voice</h2>
-              <span style="font-size:0.85rem; color:var(--conv-accent);">Patient Onboarding</span>
+              <span class="conv-caregiver-badge">Caregiver Setup (Keyboard & Mouse)</span>
             </div>
             <p style="color:var(--conv-text-muted); font-size:0.95rem; margin-top:0;">
               Caregiver: Please customize the patient profile below to enable personalized AI predictions and medication reminders.
@@ -461,14 +461,14 @@ export function startConversation(app) {
       return;
     }
 
-    // 3. Doctor/Family Daily Summary Modal
+    // 3. Doctor/Family Daily Summary Modal (Caregiver-Only)
     if (mode === 'summary') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
           <div class="conv-modal-card conv-summary-card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
               <h2 style="margin:0; color:var(--conv-accent);">📊 Daily Medical & Care Summary</h2>
-              <button class="conv-btn-pill" data-action="close-summary">✕ Close</button>
+              <span class="conv-caregiver-badge">Clinician View (Keyboard & Mouse)</span>
             </div>
             ${
               isLoadingSummary
@@ -478,7 +478,7 @@ export function startConversation(app) {
             <div class="conv-modal-actions">
               <button class="conv-btn-pill" id="btn-copy-summary">📋 Copy Report</button>
               <button class="conv-btn-pill" id="btn-print-summary">🖨️ Print / Save PDF</button>
-              <button class="conv-btn-pill active" data-action="close-summary">Done</button>
+              <button class="conv-btn-pill active" data-action="close-summary">✕ Close</button>
             </div>
           </div>
         </div>
@@ -498,12 +498,15 @@ export function startConversation(app) {
       return;
     }
 
-    // 4. Caregiver Memory & Profile Settings Modal (Keyboard-friendly)
+    // 4. Caregiver Memory & Profile Settings Modal (Caregiver-Only)
     if (mode === 'profile') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
           <div class="conv-modal-card">
-            <h2 style="margin-top:0; color:var(--conv-accent);">Caregiver: Patient Profile & Memory</h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h2 style="margin:0; color:var(--conv-accent);">Caregiver: Patient Profile & Memory</h2>
+              <span class="conv-caregiver-badge">Caregiver Editor (Keyboard & Mouse)</span>
+            </div>
             <div class="conv-form-group">
               <label>Patient Name</label>
               <input type="text" id="prof-name" value="${escapeHtml(memory.name)}" />
@@ -533,7 +536,7 @@ export function startConversation(app) {
               <textarea id="prof-notes" rows="2">${escapeHtml(memory.notes || '')}</textarea>
             </div>
             <div class="conv-modal-actions">
-              <button class="conv-btn-pill" id="btn-save-profile">Save Changes</button>
+              <button class="conv-btn-pill active" id="btn-save-profile">Save Changes</button>
               <button class="conv-btn-pill" data-action="close-profile">Close</button>
             </div>
           </div>
@@ -559,7 +562,7 @@ export function startConversation(app) {
       return;
     }
 
-    // 5. Top Bar (Heard Strip, Translation Subtitle, Caregiver Tools, Accessibility)
+    // 5. Top Bar (Heard Strip, Translation Subtitle, Caregiver Toolbar)
     const topBarHtml = `
       <header class="conv-topbar">
         <div class="conv-heard-container">
@@ -573,7 +576,8 @@ export function startConversation(app) {
           ${isLoadingReplies ? '<div class="conv-loading-pill">Thinking...</div>' : ''}
         </div>
 
-        <div class="conv-controls">
+        <div class="conv-caregiver-controls" title="Caregiver & Judge Controls (Mouse / Touch Only)">
+          <span class="conv-caregiver-label">Caregiver:</span>
           <button class="conv-btn-pill ${isListening ? 'active' : ''}" data-action="toggle-mic">
             🎤 ${isListening ? 'Mic On' : 'Mic Off'}
           </button>
@@ -585,6 +589,9 @@ export function startConversation(app) {
           </button>
           <button class="conv-btn-pill ${isLargeText ? 'active' : ''}" data-action="toggle-size" title="Bigger Text Toggle">
             Aa Size
+          </button>
+          <button class="conv-btn-pill" data-action="toggle-listener-lang" title="Toggle Listener Voice Language">
+            🌐 ${escapeHtml(listenerObj.name)}
           </button>
           <button class="conv-btn-pill" data-action="toggle-input" title="Manual Text Box Fallback">
             ⌨️ Text
@@ -652,18 +659,45 @@ export function startConversation(app) {
       }
     `;
 
-    // 6. Side Navigation Rail (All large gaze targets >= 200x150px with >=40px gap)
-    const navRailHtml = mode === 'spell' ? `
-      <nav class="conv-nav-rail">
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-speak" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.15);">
-          <span class="conv-tile-tag">Action</span>
-          <span class="conv-tile-text">🔊 Speak</span>
+    // 6. Side Navigation Rail (All large gaze targets with fixed Emergency)
+    let navTilesHtml = '';
+
+    if (mode === 'chat') {
+      navTilesHtml = `
+        ${
+          fatigueAlert
+            ? `
+          <button class="conv-tile conv-tile-nav conv-tile-fatigue" data-gaze-target data-action="fatigue-rest">
+            <span class="conv-tile-tag">Tired?</span>
+            <span class="conv-tile-text">😴 Take a break</span>
+            <div class="conv-tile-dwell-ring"></div>
+          </button>
+        `
+            : ''
+        }
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-topics" style="border-color:#ab47bc; background:rgba(171,71,188,0.12);">
+          <span class="conv-tile-tag">Initiate</span>
+          <span class="conv-tile-text">💬 I want to say</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-whatsapp" style="border-color:#25d366; background:rgba(37,211,102,0.12);">
-          <span class="conv-tile-tag">WhatsApp</span>
-          <span class="conv-tile-text">📲 Send MSG</span>
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-categories">
+          <span class="conv-tile-tag">AAC Library</span>
+          <span class="conv-tile-text">📂 ${isHi ? 'श्रेणियाँ' : 'Categories'}</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-spell">
+          <span class="conv-tile-tag">Keyboard</span>
+          <span class="conv-tile-text">🔤 ${isHi ? 'लिखें' : 'Spell'}</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+      `;
+    } else if (mode === 'spell') {
+      navTilesHtml = `
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-speak" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.15);">
+          <span class="conv-tile-tag">Action</span>
+          <span class="conv-tile-text">🔊 Speak Out</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
@@ -679,74 +713,36 @@ export function startConversation(app) {
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-clear">
-          <span class="conv-tile-tag">Edit</span>
-          <span class="conv-tile-text">✕ Clear</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
         <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
           <span class="conv-tile-tag">Return</span>
-          <span class="conv-tile-text">💬 Back</span>
+          <span class="conv-tile-text">💬 Back to Chat</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
-
-        <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-dwell="2000" data-action="emergency">
-          <span class="conv-tile-tag">Hold 2s</span>
-          <span class="conv-tile-text">🚨 EMERGENCY</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-      </nav>
-    ` : `
-      <nav class="conv-nav-rail">
+      `;
+    } else {
+      // Topics, Categories, and sub-menus
+      navTilesHtml = `
         <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
           <span class="conv-tile-tag">Navigation</span>
-          <span class="conv-tile-text">⬅️ ${mode === 'chat' ? 'Reset' : 'Back'}</span>
+          <span class="conv-tile-text">⬅️ Back to Chat</span>
           <div class="conv-tile-dwell-ring"></div>
         </button>
+      `;
+    }
 
-        <button class="conv-tile conv-tile-nav ${mode === 'topics' ? 'is-active' : ''}" data-gaze-target data-action="nav-topics" style="border-color:#ab47bc; background:rgba(171,71,188,0.12);">
-          <span class="conv-tile-tag">Initiate</span>
-          <span class="conv-tile-text">💬 I want to say</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        <button class="conv-tile conv-tile-nav ${mode === 'categories' ? 'is-active' : ''}" data-gaze-target data-action="nav-categories">
-          <span class="conv-tile-tag">AAC Library</span>
-          <span class="conv-tile-text">📂 ${isHi ? 'श्रेणियाँ' : 'Categories'}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        <button class="conv-tile conv-tile-nav ${mode === 'spell' ? 'is-active' : ''}" data-gaze-target data-action="nav-spell">
-          <span class="conv-tile-tag">Keyboard</span>
-          <span class="conv-tile-text">🔤 ${isHi ? 'लिखें' : 'Spell'}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="toggle-listener-lang">
-          <span class="conv-tile-tag">Listener Voice</span>
-          <span class="conv-tile-text">🌐 ${escapeHtml(listenerObj.label)}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        ${
-          fatigueAlert
-            ? `
-          <button class="conv-tile conv-tile-fatigue" data-gaze-target data-action="fatigue-rest">
-            <span class="conv-tile-tag">Tired?</span>
-            <span class="conv-tile-text">😴 Take a break</span>
+    const sidebarHtml = `
+      <aside class="conv-sidebar">
+        <nav class="conv-nav-rail">
+          ${navTilesHtml}
+        </nav>
+        <div class="conv-emergency-container">
+          <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-dwell="2000" data-action="emergency">
+            <span class="conv-tile-tag">Hold 2s</span>
+            <span class="conv-tile-text">🚨 EMERGENCY</span>
             <div class="conv-tile-dwell-ring"></div>
           </button>
-        `
-            : ''
-        }
-
-        <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-dwell="2000" data-action="emergency">
-          <span class="conv-tile-tag">Hold 2s</span>
-          <span class="conv-tile-text">🚨 EMERGENCY</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-      </nav>
+        </div>
+      </aside>
     `;
 
     // 7. Main Interactive Grid depending on Mode
@@ -844,7 +840,7 @@ export function startConversation(app) {
         </div>
       `;
     } else if (mode === 'spell') {
-      // Spell Mode Keyboard
+      // Spell Mode Keyboard - All large gaze targets with data-gaze-target
       const activeGrp = spellEngine.activeGroup;
       const predictions = spellEngine.predictions || [];
 
@@ -854,13 +850,8 @@ export function startConversation(app) {
             <div class="conv-spell-buffer">
               ${escapeHtml(spellEngine.buffer)}<span class="conv-spell-cursor"></span>
             </div>
-            <div class="conv-spell-actions">
-              <button class="conv-btn-pill" data-action="spell-space">␣ Space</button>
-              <button class="conv-btn-pill" data-action="spell-backspace">⌫ Backspace</button>
-              <button class="conv-btn-pill" data-action="spell-clear">✕ Clear</button>
-              <button class="conv-btn-pill active" data-action="spell-speak" style="background:#00e5ff; color:#0b0e14; font-weight:700;">
-                🔊 Speak
-              </button>
+            <div style="font-size:0.9rem; color:var(--conv-text-muted);">
+              Glance letters to spell &bull; Space / Backspace in sidebar
             </div>
           </div>
 
@@ -890,26 +881,41 @@ export function startConversation(app) {
                     .map(
                       (char) => `
                   <button class="conv-tile" data-gaze-target data-action="spell-letter" data-value="${char}">
-                    <span class="conv-tile-text" style="font-size:2.8rem;">${char}</span>
+                    <span class="conv-tile-text" style="font-size:2.8rem; font-weight:700;">${char}</span>
                     <div class="conv-tile-dwell-ring"></div>
                   </button>
                 `
                     )
                     .concat(`
                   <button class="conv-tile" data-gaze-target data-action="spell-group" data-value="">
+                    <span class="conv-tile-tag">Keyboard</span>
                     <span class="conv-tile-text">⬅️ Groups</span>
+                    <div class="conv-tile-dwell-ring"></div>
+                  </button>
+                  <button class="conv-tile" data-gaze-target data-action="spell-clear" style="border-color:#ff5252; background:rgba(255,82,82,0.12);">
+                    <span class="conv-tile-tag">Edit</span>
+                    <span class="conv-tile-text">✕ Clear All</span>
                     <div class="conv-tile-dwell-ring"></div>
                   </button>
                 `)
                     .join('')
-                : LETTER_GROUPS.map(
-                    (grp) => `
+                : LETTER_GROUPS.slice(0, 5)
+                    .map(
+                      (grp) => `
                   <button class="conv-tile" data-gaze-target data-action="spell-group" data-value="${grp.id}">
-                    <span class="conv-tile-text" style="font-size:2rem; letter-spacing:0.15em;">${grp.label}</span>
+                    <span class="conv-tile-text" style="font-size:1.8rem; letter-spacing:0.12em;">${grp.label}</span>
                     <div class="conv-tile-dwell-ring"></div>
                   </button>
                 `
-                  ).join('')
+                    )
+                    .concat(`
+                  <button class="conv-tile" data-gaze-target data-action="spell-clear" style="border-color:#ff5252; background:rgba(255,82,82,0.12);">
+                    <span class="conv-tile-tag">Edit</span>
+                    <span class="conv-tile-text">✕ Clear All</span>
+                    <div class="conv-tile-dwell-ring"></div>
+                  </button>
+                `)
+                    .join('')
             }
           </div>
         </div>
@@ -919,7 +925,7 @@ export function startConversation(app) {
     app.innerHTML = `
       ${topBarHtml}
       <div class="conv-main-view">
-        ${navRailHtml}
+        ${sidebarHtml}
         ${mainContentHtml}
       </div>
     `;
