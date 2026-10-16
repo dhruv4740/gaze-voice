@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "e2e": "playwright test",
-    "sim": "node scripts/sim/jitter.mjs && node scripts/sim/gate.mjs",
+    "sim": "node scripts/sim/jitter.mjs && node scripts/sim/gate.mjs && node scripts/sim/handkeys.mjs",
     "fetch-models": "node scripts/fetch-models.mjs"
   },
   "devDependencies": {

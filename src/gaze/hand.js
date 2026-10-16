@@ -4,6 +4,7 @@
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { LOCAL, CDN, localAvailable } from './models.js';
 import { createMeter } from './camera.js';
+import { createHold } from './handhold.js';
 
 const LOST_AFTER_MS = 800;
 const REGION = 0.6; // central share of the frame that maps onto the whole screen
@@ -43,6 +44,7 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
   let lastLm = null; // for X-ray mode
   let held = null; // pointer position held while the fingers close
   const pinch = createPinch();
+  const hold = createHold(); // on pinch, rewind to where the fingertip was before the fingers started closing
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
 
   async function start() {
@@ -108,16 +110,14 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
     lastLm = lm || null;
     draw(lm);
     if (!lm) {
-      if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); held = null; }
+      if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); hold.reset(); held = null; }
       return;
     }
     lastSeen = now;
     setStatus('tracking');
     const st = pinch.update(pinchRatio(lm));
-    if (!st.frozen || !held) {
-      const { u, v } = boxMap(lm);
-      held = { x: u * window.innerWidth, y: v * window.innerHeight };
-    }
+    const { u, v } = boxMap(lm);
+    held = hold.update(u * window.innerWidth, v * window.innerHeight, now, st.frozen);
     onPoint(held.x, held.y);
     if (st.justPinched) onPinch?.();
   }

@@ -10,7 +10,7 @@ export const PRESETS = {
   //          deadZone: ignore wobble smaller than this around the held point
   eyes: { minCutoff: 0.15, beta: 0.004, dCutoff: 1, deadZone: 30 },
   iris: { minCutoff: 0.1, beta: 0.003, dCutoff: 1, deadZone: 35 },
-  hand: { minCutoff: 4, beta: 0.1, dCutoff: 1, deadZone: 3, median: 1 }, // the hand is precise: little smoothing, no median lag
+  hand: { minCutoff: 1.5, beta: 0.02, dCutoff: 1, deadZone: 10, median: 3 }, // midair fingertip tremor is ~25 px on a keyboard: smooth more than a mouse (sim: scripts/sim/handkeys.mjs)
   head: { minCutoff: 0.1, beta: 0.003, dCutoff: 1, deadZone: 35 },
 };
 

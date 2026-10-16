@@ -261,3 +261,14 @@ test('10b. X-ray with a (fake) camera in head+hand mode', async ({ page }) => {
   await page.screenshot({ path: 'test-results/xray-cam.png' });
   expect(errs).toEqual([]);
 });
+
+test('11. Stop tile turns into Listen and back', async ({ page }) => {
+  await prep(page);
+  await page.goto('/?mode=mouse');
+  await page.waitForSelector('#slot-agree');
+  await page.evaluate(() => document.querySelector('[data-action="audio-stop"]').click());
+  await expect(page.locator('[data-action="audio-listen"]')).toHaveCount(1);
+  await expect(page.locator('[data-action="audio-stop"]')).toHaveCount(0);
+  await page.evaluate(() => document.querySelector('[data-action="audio-listen"]').click());
+  await expect(page.locator('[data-action="audio-stop"]')).toHaveCount(1);
+});
