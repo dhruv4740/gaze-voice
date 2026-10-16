@@ -54,7 +54,8 @@ and the browser Web Speech API.
 ### Head sensitivity and hand mode
 
 - Camera modes (head, iris, eyes) have a sensitivity slider in the HUD (0.5–2.0, saved), also **Shift+]** / **Shift+[**. Lower = a bigger movement per screen distance. Head calibration now says to point with the nose and redoes a dot if the head barely moved.
-- `?mode=hand`: for users who can move a hand but not speak. The index fingertip is the pointer (central 60% of the camera frame maps to the whole screen); pinching thumb and index selects instantly. No calibration. Hand tracking uses MediaPipe HandLandmarker (Apache-2.0, `@mediapipe/tasks-vision`).
+- `?mode=hand`: for users who can move a hand but not speak. The index fingertip is the pointer (central 60% of the camera frame maps to the whole screen); pinching thumb and index selects instantly. No calibration. Hand tracking uses MediaPipe HandLandmarker (Apache-2.0, `@mediapipe/tasks-vision`). The hand cursor follows the raw smoothed fingertip (light filter, no median); snapping only picks the target. `window.__handStats` shows detection fps and ms per frame.
+- `?mode=head+hand`: one camera stream feeds both the face and hand models on alternate frames. The hand takes the pointer while visible (120 ms crossfade), otherwise the head; head calibration still runs. Any source can select. Pick it as "Head + hand" in the input picker.
 
 ### Rest mode
 
@@ -69,5 +70,6 @@ No `?mode` shows a "How can you move?" picker on first load (choice saved in loc
 | `head` | head/nose pointing (default choice for "Eyes / head") | dwell, long blink |
 | `eyes`, `iris` | webcam eye tracking | dwell, long blink (iris) |
 | `hand` | finger pointing | dwell, pinch |
+| `head+hand` (also `iris+hand`) | head, or the hand once it is visible | dwell, pinch, long blink, Space/Enter |
 | `scan` | blink only or one switch | row-column scan; long blink, Space/Enter or click picks |
 | `mouse` | caregiver / testing | click |

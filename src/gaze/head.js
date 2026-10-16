@@ -40,7 +40,7 @@ export function fitAffine(samples, key) {
 // `features(landmarks)` -> number[]; `makeModel(pairs)` -> predict(f) => [x, y] | null,
 // where pairs are { f, x, y } calibration samples. Head and iris modes differ only in these.
 // `onBlink(left, right, t)` gets eye-closure blendshape scores every frame.
-export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeModel }) {
+export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeModel, camera }) {
   let video = null;
   let stream = null;
   let landmarker = null;
@@ -58,11 +58,13 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
 
   async function start() {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
-    } catch (err) {
-      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-      throw new Error(denied ? 'Camera permission denied' : 'Camera unavailable');
+    if (!camera) { // a shared camera (combined inputs) is opened by its owner
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+      } catch (err) {
+        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+        throw new Error(denied ? 'Camera permission denied' : 'Camera unavailable');
+      }
     }
     try {
       const localOk = await localAvailable(LOCAL.task);
@@ -74,8 +76,15 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
       });
       try { landmarker = await make(localOk ? LOCAL : CDN); } catch (e) { if (!localOk) throw e; landmarker = await make(CDN); }
     } catch (err) {
-      stream.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((t) => t.stop());
       throw new Error('Could not load face model (offline?)');
+    }
+    if (camera) {
+      video = camera.video;
+      running = true;
+      lastSeen = performance.now();
+      camera.subscribe(step);
+      return;
     }
     video = document.createElement('video');
     video.className = 'gaze-head-preview';
@@ -95,7 +104,11 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     raf = requestAnimationFrame(loop);
     if (video.currentTime === lastVideoTime || video.readyState < 2) return;
     lastVideoTime = video.currentTime;
-    const now = performance.now();
+    step(performance.now());
+  }
+
+  function step(now) {
+    if (!running) return;
     const res = landmarker.detectForVideo(video, now);
     const lms = res.faceLandmarks && res.faceLandmarks[0];
     const f = lms && features(lms);
@@ -163,7 +176,7 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     running = false;
     cancelAnimationFrame(raf);
     stream?.getTracks().forEach((t) => t.stop());
-    video?.remove();
+    if (!camera) video?.remove();
     landmarker?.close();
   }
 

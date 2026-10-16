@@ -22,6 +22,16 @@ export function startGaze({ mode, root }) {
 }
 
 function run(mode, root) {
+  // combined input: 'head+hand' / 'iris+hand' (any order); anything else with a '+' falls back to head
+  let parts = String(mode).split('+');
+  if (parts.length > 1) {
+    const face = parts.find((p) => p === 'head' || p === 'iris');
+    if (parts.length === 2 && parts.includes('hand') && face) mode = `${face}+hand`;
+    else mode = 'head';
+    parts = mode.split('+');
+  }
+  const isCombo = parts.length > 1;
+  const faceMode = isCombo ? parts.find((p) => p !== 'hand') : mode;
   const cursor = document.createElement('div');
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
@@ -42,7 +52,7 @@ function run(mode, root) {
   const params = new URLSearchParams(location.search);
   const sw = document.createElement('select');
   sw.id = 'gaze-mode';
-  for (const m of ['mouse', 'eyes', 'iris', 'head', 'hand', 'scan']) sw.add(new Option(m, m, false, m === mode));
+  for (const m of ['mouse', 'eyes', 'iris', 'head', 'hand', 'head+hand', 'scan']) sw.add(new Option(m, m, false, m === mode));
   sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
   ui.appendChild(sw);
   const changeBtn = document.createElement('button');
@@ -85,7 +95,7 @@ function run(mode, root) {
   blinkBox.checked = localStorage.getItem('gaze-blink') !== '0';
   blinkBox.onchange = () => localStorage.setItem('gaze-blink', blinkBox.checked ? '1' : '0');
   blinkLabel.append(blinkBox, ' blink select');
-  if (mode === 'head' || mode === 'iris' || mode === 'scan') ui.appendChild(blinkLabel);
+  if (mode === 'head' || mode === 'iris' || mode === 'scan' || isCombo) ui.appendChild(blinkLabel);
   let blinkTarget = null; // what was hovered when the eyes closed
   const blink = createBlinkDetector({
     onChange: (closed) => {
@@ -143,12 +153,13 @@ function run(mode, root) {
   let calibrating = false;
   let everTracked = false;
   const setPoint = (x, y) => { point = { x, y }; if (x >= 0) everTracked = true; };
-  const smoother = createPointSmoother(PRESETS[mode] || PRESETS.head);
+  const faceSm = createPointSmoother(PRESETS[faceMode] || PRESETS.head);
+  const handSm = createPointSmoother(PRESETS.hand);
   // raw tracker samples go through One Euro + dead zone; (-1,-1) means "no face"
   // sensitivity (0.5-2.0) scales the pointer's distance from the screen centre, so lower = a
   // bigger head/eye movement per screen distance. Persisted. Not applied to mouse or hand.
   let gain = Math.min(2, Math.max(0.5, Number(localStorage.getItem('gaze-gain')) || 1));
-  const gainOn = mode === 'head' || mode === 'iris' || mode === 'eyes';
+  const gainOn = mode === 'head' || mode === 'iris' || mode === 'eyes' || isCombo; // face points only
   const gainBox = document.createElement('label');
   gainBox.id = 'gaze-gain-label';
   const gainSlider = document.createElement('input');
@@ -165,15 +176,36 @@ function run(mode, root) {
   gainBox.append(gainSlider, gainText);
   setGain(gain);
   if (gainOn) ui.appendChild(gainBox);
-  const setRaw = (x, y) => {
-    if (x < 0) { smoother.reset(); setPoint(-1, -1); return; }
-    if (gainOn && gain !== 1) {
+  // Pointer sources. Each is smoothed on its own; the hand wins while it is visible (a ~120 ms
+  // crossfade), otherwise the face. Single modes just have one source.
+  const src = { face: null, hand: null };
+  let handT = 0; let blendW = 0; let blendT = performance.now();
+  const HAND_HOLD_MS = 500;
+  const handLead = () => mode === 'hand' || (isCombo && blendW > 0.5);
+  const merge = () => {
+    const now = performance.now();
+    const target = src.hand && now - handT < HAND_HOLD_MS ? 1 : 0;
+    blendW += (target - blendW) * Math.min(1, (now - blendT) / 120);
+    blendT = now;
+    const f = src.face; const h = src.hand;
+    if (!f && !h) setPoint(-1, -1);
+    else if (!h) setPoint(f.x, f.y);
+    else if (!f) setPoint(h.x, h.y);
+    else setPoint(f.x + (h.x - f.x) * blendW, f.y + (h.y - f.y) * blendW);
+  };
+  const setRaw = (x, y, from) => {
+    const s = mode === 'hand' || from === 'hand' ? 'hand' : 'face';
+    const sm = s === 'hand' ? handSm : faceSm;
+    if (x < 0) { sm.reset(); src[s] = null; merge(); return; }
+    if (s === 'face' && gainOn && gain !== 1) {
       const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
       x = Math.min(window.innerWidth, Math.max(0, cx + (x - cx) * gain));
       y = Math.min(window.innerHeight, Math.max(0, cy + (y - cy) * gain));
     }
-    const p = smoother.filter(x, y, performance.now());
-    setPoint(p.x, p.y);
+    const p = sm.filter(x, y, performance.now());
+    src[s] = { x: p.x, y: p.y };
+    if (s === 'hand') handT = performance.now();
+    merge();
   };
 
   // ?jitter=1 (mouse mode): fake a noisy camera tracker (gaussian noise + outlier jumps)
@@ -202,23 +234,33 @@ function run(mode, root) {
       onStatus: () => {},
     }).start()).then(() => showStatus('scan: blink, Space, Enter or click', 'ok'))
       .catch(() => showStatus('no camera: use Space, Enter or click', 'bad'));
-  } else if (mode === 'eyes' || mode === 'head' || mode === 'iris' || mode === 'hand') {
+  } else if (mode === 'eyes' || mode === 'head' || mode === 'iris' || mode === 'hand' || isCombo) {
     showStatus('starting camera…');
     // dynamic imports keep the TensorFlow / MediaPipe bundles out of mouse mode
-    const load = mode === 'eyes'
+    const load = isCombo
+      ? import('./combo.js').then((m) => (o) => m.createComboTracker({ ...o, face: faceMode }))
+      : mode === 'eyes'
       ? import('./eyes.js').then((m) => m.createEyesTracker)
       : mode === 'iris'
         ? import('./iris.js').then((m) => m.createIrisTracker)
         : mode === 'hand'
           ? import('./hand.js').then((m) => m.createHandTracker)
           : import('./head.js').then((m) => m.createHeadTracker);
+    const st = { face: '', hand: '' };
     const calibOpts = mode === 'eyes' ? {} : { clicksPerDot: 3 };
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
         onPinch: () => { const el = dwell.el; if (el) { dwell.select(); selectNow(el); } }, // hand mode: pinch = instant select
         onBlink: (l, r, t) => { if (!rest.resting) fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
-        onStatus: (s) => {
+        onStatus: (s, from) => {
+          if (isCombo) {
+            st[from] = s;
+            const live = [st.face === 'tracking' && faceMode, st.hand === 'tracking' && 'hand'].filter(Boolean);
+            showStatus(live.length ? `tracking: ${live.join(' + ')}` : s, live.length ? 'ok' : 'bad');
+            if (/ lost$/.test(s)) setRaw(-1, -1, from);
+            return;
+          }
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
           if (/ lost$/.test(s)) setRaw(-1, -1);
@@ -238,8 +280,8 @@ function run(mode, root) {
         const calibrate = async () => {
           calibrating = true;
           const { runCalibration, HEAD_POINTS } = await import('./calibration.js');
-          const opts = mode === 'head' ? { points: HEAD_POINTS, ...calibOpts } : calibOpts;
-          opts.label = mode;
+          const opts = faceMode === 'head' ? { points: HEAD_POINTS, ...calibOpts } : { ...calibOpts };
+          opts.label = faceMode;
           await runCalibration({ root, tracker, getPoint: () => point, ...opts });
           calibrating = false;
         };
@@ -277,6 +319,15 @@ function run(mode, root) {
     e.preventDefault();
   });
 
+  // combined input: Space / Enter selects the hovered tile too (a helper's switch, or a free hand)
+  if (isCombo) {
+    window.addEventListener('keydown', (e) => {
+      if ((e.key !== ' ' && e.key !== 'Enter') || e.repeat || e.shiftKey || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target?.tagName)) return;
+      const el = dwell.el;
+      if (el && el.isConnected && !rest.resting) { e.preventDefault(); dwell.select(); selectNow(el); }
+    }, true);
+  }
+
   const targeter = createTargeter();
   const dwell = createDwell();
   let hovered = null;
@@ -286,7 +337,7 @@ function run(mode, root) {
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
     // every confirmed selection is a calibration sample + one point on the accuracy sparkline
-    if (!calibrating && !rest.resting && !(mode === 'mouse' && !jitter) && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
+    if (!calibrating && !rest.resting && !(mode === 'mouse' && !jitter) && !handLead() && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
       const b = el.getBoundingClientRect();
       const cx = (b.left + b.right) / 2; const cy = (b.top + b.bottom) / 2;
       stats.addError(Math.hypot(point.x - cx, point.y - cy));
@@ -357,7 +408,7 @@ function run(mode, root) {
 
     // cursor: centre of the snapped target for camera modes, else the pointer itself
     const c = !plainMouse && target ? targeter.center(target, rects) : null;
-    const shown = c || point;
+    const shown = c && !handLead() ? c : point; // the hand's cursor follows the raw pointer; snapping still picks the target
     cursor.style.left = `${shown.x}px`;
     cursor.style.top = `${shown.y}px`;
     rawDot.style.left = `${point.x}px`;

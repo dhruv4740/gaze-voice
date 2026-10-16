@@ -3,14 +3,14 @@
 // Low speed -> heavy smoothing (steady dwell); high speed -> lower lag.
 
 // ---- tuning (px, Hz) ----
-export const MEDIAN_N = 5; // raw samples in the outlier-rejecting median
+export const MEDIAN_N = 5; // default raw samples in the outlier-rejecting median (a preset's `median` overrides)
 export const PRESETS = {
   //          minCutoff: still-pointer smoothing (lower = steadier, slower)
   //          beta: speed coefficient (higher = follows fast moves sooner)
   //          deadZone: ignore wobble smaller than this around the held point
   eyes: { minCutoff: 0.15, beta: 0.004, dCutoff: 1, deadZone: 30 },
   iris: { minCutoff: 0.1, beta: 0.003, dCutoff: 1, deadZone: 35 },
-  hand: { minCutoff: 0.8, beta: 0.01, dCutoff: 1, deadZone: 8 }, // the hand is precise: light smoothing
+  hand: { minCutoff: 4, beta: 0.1, dCutoff: 1, deadZone: 3, median: 1 }, // the hand is precise: little smoothing, no median lag
   head: { minCutoff: 0.1, beta: 0.003, dCutoff: 1, deadZone: 35 },
 };
 
@@ -35,7 +35,7 @@ class OneEuro {
 
 const median = (a) => { const b = [...a].sort((x, y) => x - y); return b[b.length >> 1]; };
 
-export function createPointSmoother({ minCutoff, beta, dCutoff, deadZone } = PRESETS.head) {
+export function createPointSmoother({ minCutoff, beta, dCutoff, deadZone, median: medN = MEDIAN_N } = PRESETS.head) {
   const fx = new OneEuro({ minCutoff, beta, dCutoff });
   const fy = new OneEuro({ minCutoff, beta, dCutoff });
   let lastT = null;
@@ -49,7 +49,7 @@ export function createPointSmoother({ minCutoff, beta, dCutoff, deadZone } = PRE
       const dt = lastT === null ? 1 / 30 : Math.max((t - lastT) / 1000, 1e-3);
       lastT = t;
       hx.push(x); hy.push(y);
-      if (hx.length > MEDIAN_N) { hx.shift(); hy.shift(); }
+      if (hx.length > medN) { hx.shift(); hy.shift(); }
       const sx = fx.filter(median(hx), dt);
       const sy = fy.filter(median(hy), dt);
       // dead zone: ignore wobble smaller than deadZone px around the held point
