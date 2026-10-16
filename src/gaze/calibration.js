@@ -25,7 +25,7 @@ const COPY = {
 const MIN_TRAVEL = 0.025; // head mode: a corner dot must move the nose this far (fraction of the frame) from the centre dot
 const MAX_RETRIES = 3;
 
-export function runCalibration({ root, tracker, getPoint, points = dotPositions(), clicksPerDot = CLICKS_PER_DOT, label = '' }) {
+export function runCalibration({ root, tracker, getPoint, points = dotPositions(), clicksPerDot = CLICKS_PER_DOT, label = '', walkthrough = true }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.id = 'gaze-calib';
@@ -143,12 +143,42 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
         try { localStorage.setItem('gaze-errors', JSON.stringify(all)); } catch { /* ignore */ }
         cmp.textContent = Object.entries(all).map(([k, e]) => `${k}: ${e}px`).join(' | ');
       }
-      msg.append(h, v, cmp, again, done);
-      again.onclick = async () => { clearTimers(); await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot, label })); };
+      for (const b of [again, done]) { // reachable by the active input (head/hand/dwell), not only by a click
+        b.setAttribute('data-gaze-target', ''); b.setAttribute('data-gaze-dwell', '1200');
+        b.addEventListener('gaze-select', () => b.click());
+      }
+      const row = document.createElement('div'); row.className = 'calib-actions'; row.append(again, done);
+      msg.append(h, v, cmp, row);
+      again.onclick = async () => { clearTimers(); await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot, label, walkthrough: false })); };
       done.onclick = () => { overlay.remove(); resolve({ meanError }); };
     }
 
-    showDot();
+    // Walkthrough: three timed full-screen steps before the first dot; Skip is a gaze target too.
+    function walk(next) {
+      if (!walkthrough) { next(); return; }
+      const STEPS = ['Sit about an arm’s length from the screen', 'Look at each dot until it moves', 'To pick something, hold your look on it'];
+      const STEP_MS = 3500;
+      dot.style.display = 'none'; msg.style.display = 'none';
+      const w = document.createElement('div'); w.className = 'calib-walk';
+      const t = document.createElement('div'); t.className = 'calib-walk-text';
+      const bar = document.createElement('div'); bar.className = 'calib-walk-bar';
+      const fill = document.createElement('div'); bar.appendChild(fill);
+      const skip = document.createElement('button'); skip.className = 'calib-walk-skip'; skip.textContent = 'Skip';
+      skip.setAttribute('data-gaze-target', ''); skip.setAttribute('data-gaze-dwell', '1200');
+      w.append(t, bar, skip); overlay.appendChild(w);
+      let step = 0; let timer = 0; let over = false;
+      const end = () => { if (over) return; over = true; clearTimeout(timer); w.remove(); dot.style.display = ''; msg.style.display = ''; next(); };
+      const show = () => {
+        if (over) return;
+        if (step >= STEPS.length) { end(); return; }
+        t.textContent = STEPS[step]; fill.style.transition = 'none'; fill.style.width = '0%';
+        void fill.offsetWidth; fill.style.transition = `width ${STEP_MS}ms linear`; fill.style.width = '100%';
+        step++; timer = setTimeout(show, STEP_MS);
+      };
+      skip.onclick = end; skip.addEventListener('gaze-select', end);
+      show();
+    }
+    walk(() => showDot());
   });
 }
 
