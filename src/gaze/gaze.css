@@ -43,6 +43,11 @@ video.gaze-head-preview { position: fixed; right: 8px; bottom: 8px; width: 160px
 #gaze-status:empty { display: none; }
 #gaze-raw { position: fixed; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: rgba(255,255,255,.35); pointer-events: none; z-index: 1000; }
 
+#gaze-break { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 1150; width: 240px; height: 170px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 18px;
+  background: #5c6bc0; color: #fff; font-size: 22px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+#gaze-break span { font-size: 14px; opacity: .85; }
+#gaze-break[hidden] { display: none; }
 #caregiver-qr { background: #fff !important; color: #111 !important; border-radius: 10px !important; padding: 8px !important;
   font-size: 10px; max-width: 200px; word-break: break-all; cursor: default !important; }
 #caregiver-qr[hidden] { display: none; }

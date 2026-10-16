@@ -9,6 +9,10 @@ const NOSE_TIP = 1;
 const LOST_AFTER_MS = 800;
 const RECENT = 6;
 const BLINK_HOLD = 0.4;
+const LEARN_WINDOW_MS = 400; // raw features this far back belong to a confirmed selection
+const LEARN_CAP = 150;
+const REFIT_EVERY = 3;
+const median = (a) => { const s = [...a].sort((p, q) => p - q); return s[s.length >> 1]; };
 
 // Least squares for out = a*u + b*v + c over the samples (normal equations, 3x3).
 export function fitAffine(samples, key) {
@@ -48,6 +52,9 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
   let pairs = []; // calibration { f, x, y }
   let predict = null;
   let running = false;
+  let hist = []; // { t, f } raw features of the last second, before any smoothing
+  let learned = []; // { f, x, y } from confirmed selections
+  let sinceFit = 0;
 
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
 
@@ -108,6 +115,8 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     }
     recent.push(f);
     if (recent.length > RECENT) recent.shift();
+    hist.push({ t: now, f });
+    while (hist.length && now - hist[0].t > 1000) hist.shift();
     const p = predict && predict(f);
     if (p) onPoint(p[0], p[1]);
   }
@@ -120,7 +129,24 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
   // Called by the calibration flow before the accuracy check.
   function fit() { predict = makeModel(pairs); }
 
-  async function reset() { pairs = []; predict = null; }
+  // A confirmed selection is a free calibration sample: median of the raw features from the
+  // last 400 ms paired with the target centre. Refits every few samples once a model exists.
+  function learn(x, y) {
+    const now = performance.now();
+    const w = hist.filter((h) => now - h.t <= LEARN_WINDOW_MS);
+    if (w.length < 3 || !predict) return false;
+    const f = w[0].f.map((_, i) => median(w.map((h) => h.f[i])));
+    learned.push({ f, x, y });
+    if (learned.length > LEARN_CAP) learned.shift();
+    if (++sinceFit >= REFIT_EVERY) {
+      sinceFit = 0;
+      const m = makeModel(pairs.concat(learned, learned, learned)); // learned samples count 3x: they are recent, real use
+      if (m) predict = m;
+    }
+    return true;
+  }
+
+  async function reset() { pairs = []; learned = []; hist = []; predict = null; }
 
   function stop() {
     running = false;
@@ -130,7 +156,7 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     landmarker?.close();
   }
 
-  return { start, stop, record, reset, fit };
+  return { start, stop, record, reset, fit, learn };
 }
 
 // Head pointer: nose tip (mirrored so turning right moves right) -> screen by an affine map.

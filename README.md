@@ -22,6 +22,13 @@ The two halves only talk through [docs/CONTRACT.md](docs/CONTRACT.md).
 
 More: [docs/PLAN.md](docs/PLAN.md) · [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md)
 
+## It learns while you use it
+Every confirmed selection becomes a calibration sample (median raw features of the last 400 ms
+paired with the target centre) and the head/iris/eyes models refit every few selections. The
+stats panel shows pointer error per selection as a sparkline. A fatigue watch (blink rate vs
+your own baseline, selections slowing) shows a "Take a break?" tile, lengthens the default
+dwell, and sends `gaze:fatigue` to the caregiver phone. Demo: `__gazeFatigue.force('mild')`.
+
 ## Caregiver phone companion
 `npm run phone` starts the relay (port 8787) and Vite on the LAN. On the patient laptop
 tap **Caregiver QR** (bottom-left) and scan it with a phone on the same Wi-Fi. The phone

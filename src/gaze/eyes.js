@@ -77,5 +77,8 @@ export function createEyesTracker({ onPoint, onStatus, preview = true }) {
     if (started) await webgazer.clearData();
   }
 
-  return { start, stop, record, reset };
+  // confirmed selection = one more WebGazer training sample at the target centre
+  function learn(x, y) { record(x, y); return started; }
+
+  return { start, stop, record, reset, learn };
 }
