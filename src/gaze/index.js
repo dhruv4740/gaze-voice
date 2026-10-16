@@ -6,6 +6,7 @@ import { createTargeter, createDwell } from './select.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
+import { startCaregiverLink } from '../caregiver/patient.js';
 
 const DEFAULT_DWELL_MS = 1200;
 
@@ -39,6 +40,7 @@ export function startGaze({ mode = 'mouse', root }) {
   window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
   setInterval(() => stats.update(fatigue.stats()), 1000);
   let learner = null; // camera tracker's learn(x, y), set once tracking starts
+  startCaregiverLink({ ui });
   const statsBtn = document.createElement('button');
   statsBtn.textContent = 'Stats';
   statsBtn.onclick = () => stats.toggle();
