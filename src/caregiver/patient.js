@@ -2,10 +2,9 @@
 // of the caregiver phone URL. Frames/video never go through here, only short text events.
 import QRCode from 'qrcode';
 
-const RELAY_PORT = 8787;
 
 export function startCaregiverLink({ ui }) {
-  const relayUrl = new URLSearchParams(location.search).get('relay') || `ws://${location.hostname}:${RELAY_PORT}`;
+  const relayUrl = new URLSearchParams(location.search).get('relay') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/relay`;
   let ws = null;
   const queue = [];
 
@@ -48,10 +47,15 @@ export function startCaregiverLink({ ui }) {
     box.hidden = false;
     box.textContent = 'loading…';
     try {
-      const info = await (await fetch(`http://${location.hostname}:${RELAY_PORT}/`)).json();
-      const ip = info.ips[0];
-      if (!ip) throw new Error('no LAN address');
-      const phoneUrl = `http://${ip}:${location.port || 80}/caregiver.html?relay=ws://${ip}:${info.port}`;
+      // public host (tunnel): the page's own origin works from any network; localhost/LAN: use the LAN IP
+      const lan = /^(localhost|127\.|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
+      let phoneUrl = `${location.origin}/caregiver.html`;
+      if (lan) {
+        const info = await (await fetch('/relay-info')).json();
+        const ip = info.ips[0];
+        if (!ip) throw new Error('no LAN address');
+        phoneUrl = `http://${ip}:${location.port || 80}/caregiver.html`;
+      }
       const canvas = document.createElement('canvas');
       await QRCode.toCanvas(canvas, phoneUrl, { width: 180, margin: 1 });
       const label = document.createElement('div');

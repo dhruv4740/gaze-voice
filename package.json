@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:host": "vite --host",
     "relay": "node server/relay.js",
+    "tunnel": "tools\\cloudflared.exe tunnel --url http://localhost:5173",
     "phone": "concurrently -k \"npm:relay\" \"npm:dev:host\"",
     "build": "vite build",
     "preview": "vite preview",
