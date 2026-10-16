@@ -81,7 +81,8 @@ Rules:
         model,
         messages,
         temperature: 0.6,
-        max_tokens: 300,
+        reasoning_effort: 'low',
+        max_completion_tokens: 300,
         response_format: { type: 'json_object' }
       }),
       signal: controller.signal
@@ -138,7 +139,8 @@ export async function predictWordCompletions(prefix, context = '') {
         model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
-        max_tokens: 100,
+        reasoning_effort: 'low',
+        max_completion_tokens: 100,
         response_format: { type: 'json_object' }
       })
     });
