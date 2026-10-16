@@ -10,5 +10,9 @@
   },
   "devDependencies": {
     "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1",
+    "webgazer": "^3.5.3"
   }
 }

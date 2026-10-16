@@ -1,0 +1,45 @@
+*RENAISSANCE – SHORTLIST (2 ideas)*
+
+━━━━━━━━━━━━━━━━━━━━
+*1. DECOY – an AI grandma that scams the scammers*
+Pillar: A New Worldview / Challenge the Perspective
+
+*Problem:* Every scam defence is passive (block, warn, educate). Scammers lose nothing, so they keep calling.
+
+*Idea:* Flip it. "Shanta Aaji", an AI Marathi/Hindi grandma, picks up and keeps the scammer talking as long as possible – confused, rambling, "wait, my glasses" – while quietly pulling out their UPI IDs, account numbers, fake names and tactics.
+
+*How it works (all free, runs in the browser):*
+• Scammer speaks → Chrome speech-to-text (Hindi/English)
+• Strategist AI picks the move: confused → cooperative → "payment failed, give another UPI" → "what's your badge number?"
+• Persona AI writes Aaji's reply → browser voice speaks it
+• Extractor AI pulls intel into a live dashboard
+• End of call: ready-to-file complaint for cybercrime.gov.in
+
+*Demo:* One of us plays a "CBI officer" live. Aaji wastes their time, the dashboard fills up with their UPI ID and tactics, and a timer shows "scammer minutes wasted".
+
+*Why it wins:* Bold role reversal, real Indian problem, 3-agent AI system (tech depth), a character with personality (artistic), and a great story.
+*Real precedent:* O2 UK's "Daisy" AI granny (2024) – nobody has built one for Indian scams.
+*Limit:* Real phone calls need paid telephony (Twilio), so we demo live in the room and pitch telephony as next step.
+
+━━━━━━━━━━━━━━━━━━━━
+*2. GAZE VOICE – talk with your eyes*
+Pillar: Human Potential
+
+*Problem:* People with ALS, paralysis or after a stroke often can't speak or type. Eye-tracking devices cost lakhs, and spelling letter by letter takes minutes per sentence.
+
+*Idea:* A normal laptop webcam tracks where you look. Instead of spelling, the AI suggests whole replies based on the conversation ("Yes, I'm hungry" / "Call my son" / "I'm in pain") – you just look at one and it's spoken aloud.
+
+*How it works (all free):*
+• WebGazer.js – webcam eye tracking in the browser
+• Big gaze-friendly tiles, look-and-hold (dwell) to select
+• Mic hears the other person → AI generates 4–6 likely replies
+• Browser text-to-speech speaks the chosen one
+
+*Demo:* A judge holds a real conversation using only their eyes.
+
+*Why it wins:* Huge human impact, costs ₹0 vs lakhs for devices, visual demo.
+*Risk:* Webcam tracking is shaky in bad light – need good lighting at demo and big tiles.
+
+━━━━━━━━━━━━━━━━━━━━
+*Rules to remember:* credit all libraries/APIs, commit regularly (no big last-minute commits). Coding ends 4:00, submission opens 3:45.
+*Need from team:* 1 free Groq API key (console.groq.com, no card) + ask organisers if AI coding tools are allowed.
