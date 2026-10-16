@@ -77,3 +77,12 @@ No `?mode` shows a "How can you move?" picker on first load (choice saved in loc
 ### Selection safety and timing
 
 A dwell starts only after the snapped target has been stable 300 ms with the pointer slow (< 400 px/s); fast sweeps never select, and snapping freezes while the pointer is fast. After any selection there is a 1.5 s pause with no selection (tiles dim). HUD sliders set dwell time (per input mode, default 1.2 s, hand 1.0 s) and the pause; both persist. Pinch needs the pointer locked on.
+
+### Start-screen input picker (multi-select)
+
+The start screen has two checkbox groups plus a Start button (mouse, or Tab + Space): **Pointer** (Head, Eyes/iris, Hand, Mouse) and **Select by** (Dwell, Long blink, Pinch, Switch/Space), and a separate **Blink-only scanning** switch that disables the pointer group. Head and Iris are radio-exclusive (both come from the face; if a URL lists both, iris wins). Pinch needs Hand, Long blink needs Head/Iris or scanning; impossible options are greyed with the reason shown. WebGazer `eyes` is no longer offered, but `?mode=eyes` still works.
+
+- URL form: `?mode=head+hand&select=dwell+blink+pinch` (order does not matter; missing `select` gives sensible defaults). The choice is saved in `localStorage` (`gaze-input`, `gaze-select`). "Change input" in the HUD reopens the picker (`?pick=1`) with the current choice ticked.
+- Each landmarker runs only if its input is chosen; face + hand share one camera stream. A mouse that is moving takes the pointer from the camera sources.
+- HUD chips show the active inputs. For tests: `window.__gazeDebug` = `{mode, sources, select, active, point, fps, lastSelectSource}`; `fps` is per landmarker (`{face, hand}`: `{fps, ms}`).
+

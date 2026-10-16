@@ -3,6 +3,7 @@
 // = select. No calibration. Frames stay in the browser; only the wasm and model are downloaded.
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { LOCAL, CDN, localAvailable } from './models.js';
+import { createMeter } from './camera.js';
 
 const LOST_AFTER_MS = 800;
 const REGION = 0.6; // central share of the frame that maps onto the whole screen
@@ -97,17 +98,12 @@ export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
     step(performance.now());
   }
 
-  // fps and detect cost, for profiling lag: window.__handStats = { fps, detectMs }
-  let frames = 0; let t0 = 0; let costSum = 0;
+  const meter = createMeter('hand');
   function step(now) {
     if (!running) return;
     const c0 = performance.now();
     const lm = landmarker.detectForVideo(video, now).landmarks?.[0];
-    costSum += performance.now() - c0; frames++;
-    if (now - t0 >= 1000) {
-      window.__handStats = { fps: Math.round((frames * 1000) / (now - t0)), detectMs: Math.round((costSum / frames) * 10) / 10 };
-      frames = 0; costSum = 0; t0 = now;
-    }
+    meter(now, performance.now() - c0);
     draw(lm);
     if (!lm) {
       if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); held = null; }

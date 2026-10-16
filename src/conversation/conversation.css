@@ -285,6 +285,147 @@
   display: flex;
 }
 
+/* --------------------------------------------------------------------------
+   Stable Board: Core Zone, History/Pinned Row, and Fixed Role Slots
+   -------------------------------------------------------------------------- */
+.conv-board {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  gap: 10px;
+  overflow: hidden;
+}
+
+/* 1. Core Row (Fixed: Yes, No, Wait/Stop, Repeat Last) */
+.conv-core-zone {
+  display: flex;
+  gap: 10px;
+  height: 70px;
+  min-height: 70px;
+  flex-shrink: 0;
+}
+
+.conv-tile-core {
+  flex: 1;
+  min-height: 0 !important;
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+  border-radius: 14px !important;
+  padding: 6px 12px !important;
+}
+
+.conv-tile-core.core-yes {
+  background: rgba(0, 230, 118, 0.12) !important;
+  border-color: #00e676 !important;
+  color: #b9f6ca !important;
+}
+
+.conv-tile-core.core-no {
+  background: rgba(255, 23, 68, 0.12) !important;
+  border-color: #ff1744 !important;
+  color: #ff8a80 !important;
+}
+
+.conv-tile-core.core-wait {
+  background: rgba(255, 152, 0, 0.12) !important;
+  border-color: #ff9800 !important;
+  color: #ffe082 !important;
+}
+
+.conv-tile-core.core-repeat {
+  background: rgba(0, 229, 255, 0.12) !important;
+  border-color: var(--conv-accent) !important;
+  color: #e0f7fa !important;
+}
+
+/* 2. Pinned & History Strip (Last 3 spoken) */
+.conv-aux-row {
+  display: flex;
+  gap: 8px;
+  height: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.conv-tile-pinned {
+  flex: 1.2;
+  height: 100%;
+  min-height: 0 !important;
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  background: rgba(255, 215, 0, 0.12) !important;
+  border-color: #ffd700 !important;
+  color: #fff9c4 !important;
+  border-radius: 12px !important;
+  padding: 4px 10px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conv-tile-history {
+  flex: 1;
+  height: 100%;
+  min-height: 0 !important;
+  font-size: 0.95rem !important;
+  font-weight: 500 !important;
+  background: #131824 !important;
+  border-color: #263347 !important;
+  border-radius: 12px !important;
+  padding: 4px 8px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #c9d6df;
+}
+
+/* 3. Role-Based AI Grid (2x3 slots: Agree, Decline, Need, Feeling, Ask Back, Something Else) */
+.conv-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.conv-tile-role {
+  position: relative;
+  min-height: 150px;
+  min-width: 200px;
+}
+
+.conv-tile-role.is-pinned {
+  border-color: #ffd700 !important;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.25) !important;
+}
+
+.conv-pin-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 5;
+}
+
+.conv-pin-btn:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+.conv-tile-role.is-pinned .conv-pin-btn {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px #ffd700);
+}
+
 /* Central 2x3 Grid of Big Tiles (>=200x150px with >=16px gap for cursor snap) */
 .conv-grid-container {
   flex: 1;

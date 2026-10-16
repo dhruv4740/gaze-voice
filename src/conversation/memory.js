@@ -11,17 +11,25 @@ const DEFAULT_MEMORY = {
   likes: 'Cricket, Chai with ginger, Ghazals, Sunlit window',
   meds: 'Riluzole 50mg at 9:00 AM & 9:00 PM; Pain drops at 2:00 PM; Multivitamin with lunch',
   usualNeeds: 'Water with straw, pillow adjust, suction, fan on, light blanket',
-  notes: 'Understands English, Hindi, and Marathi.'
+  notes: 'Understands English, Hindi, and Marathi.',
+  pinnedReplies: {
+    // e.g. 'agree': { text: 'Yes, absolutely', tag: 'Agree' }
+  }
 };
 
 export function getMemory() {
   try {
     const raw = localStorage.getItem(STORAGE_MEMORY_KEY);
-    if (!raw) return { ...DEFAULT_MEMORY };
-    return { ...DEFAULT_MEMORY, ...JSON.parse(raw) };
+    if (!raw) return { ...DEFAULT_MEMORY, pinnedReplies: { ...DEFAULT_MEMORY.pinnedReplies } };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_MEMORY,
+      ...parsed,
+      pinnedReplies: parsed.pinnedReplies || {}
+    };
   } catch (err) {
     console.warn('Failed to load memory:', err);
-    return { ...DEFAULT_MEMORY };
+    return { ...DEFAULT_MEMORY, pinnedReplies: {} };
   }
 }
 
@@ -30,6 +38,36 @@ export function saveMemory(memory) {
     localStorage.setItem(STORAGE_MEMORY_KEY, JSON.stringify(memory));
   } catch (err) {
     console.warn('Failed to save memory:', err);
+  }
+}
+
+export function getPinnedReplies() {
+  return getMemory().pinnedReplies || {};
+}
+
+export function savePinnedReply(role, text, tag = 'Pinned') {
+  const mem = getMemory();
+  if (!mem.pinnedReplies) mem.pinnedReplies = {};
+  mem.pinnedReplies[role] = { text, tag };
+  saveMemory(mem);
+  return mem.pinnedReplies;
+}
+
+export function removePinnedReply(role) {
+  const mem = getMemory();
+  if (mem.pinnedReplies && mem.pinnedReplies[role]) {
+    delete mem.pinnedReplies[role];
+    saveMemory(mem);
+  }
+  return mem.pinnedReplies || {};
+}
+
+export function togglePinnedReply(role, text, tag = 'Pinned') {
+  const pinned = getPinnedReplies();
+  if (pinned[role]) {
+    return removePinnedReply(role);
+  } else {
+    return savePinnedReply(role, text, tag);
   }
 }
 

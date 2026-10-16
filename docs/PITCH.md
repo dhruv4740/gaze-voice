@@ -17,7 +17,8 @@
 **Speaker 1:**  
 *"Every year in India, 1.8 million people suffer a stroke, and over 75,000 live with ALS. Their minds are 100% sharp, but their voices are locked inside paralyzed bodies.  
 Today, the standard of care is a dedicated Tobii eye-tracker costing ₹5 to 15 Lakhs—out of reach for 98% of Indian families. Even if they own one, typing letter-by-letter on a scanning keyboard takes **45 seconds** just to say: 'I need my medication.'  
-We built **Gaze Voice**: a zero-cost, browser-based AAC system that turns any standard ₹0 laptop webcam into a conversational voice that speaks at the speed of sight."*
+We built **Gaze Voice**: a zero-cost, browser-based AAC system that turns any standard ₹0 laptop webcam into a conversational voice that speaks at the speed of sight.  
+**Apple gives you a pointer; we give you a conversation.** And with our universal input modes—head tracking, hand gestures, eye gaze, and blink-scanning—it adapts to any body part that still moves."*
 
 ---
 
