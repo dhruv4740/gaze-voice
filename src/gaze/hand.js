@@ -36,7 +36,7 @@ export function createPinch() {
   };
 }
 
-export function createHandTracker({ onPoint, onStatus, onPinch }) {
+export function createHandTracker({ onPoint, onStatus, onPinch, camera }) {
   let video = null; let canvas = null; let stream = null; let landmarker = null;
   let raf = 0; let running = false; let lastSeen = 0; let status = ''; let lastVideoTime = -1;
   let held = null; // pointer position held while the fingers close
@@ -44,11 +44,13 @@ export function createHandTracker({ onPoint, onStatus, onPinch }) {
   const setStatus = (s) => { if (s !== status) { status = s; onStatus?.(s); } };
 
   async function start() {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
-    } catch (err) {
-      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-      throw new Error(denied ? 'Camera permission denied' : 'Camera unavailable');
+    if (!camera) { // a shared camera (combined inputs) is opened by its owner
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+      } catch (err) {
+        const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+        throw new Error(denied ? 'Camera permission denied' : 'Camera unavailable');
+      }
     }
     try {
       const localOk = await localAvailable(LOCAL.hand);
@@ -58,19 +60,20 @@ export function createHandTracker({ onPoint, onStatus, onPinch }) {
       const src = localOk ? LOCAL : CDN;
       try { landmarker = await make(src, 'GPU'); } catch { landmarker = await make(src, 'CPU'); }
     } catch (err) {
-      stream.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((t) => t.stop());
       throw new Error('Could not load hand model (offline?)');
     }
-    video = document.createElement('video');
-    video.className = 'gaze-head-preview';
-    video.muted = true; video.playsInline = true; video.srcObject = stream;
-    document.body.appendChild(video);
     canvas = document.createElement('canvas');
     canvas.className = 'gaze-head-preview gaze-hand-skeleton';
     canvas.width = 160; canvas.height = 120;
     document.body.appendChild(canvas);
-    await video.play();
     running = true; lastSeen = performance.now();
+    if (camera) { video = camera.video; camera.subscribe(step); return; }
+    video = document.createElement('video');
+    video.className = 'gaze-head-preview';
+    video.muted = true; video.playsInline = true; video.srcObject = stream;
+    document.body.appendChild(video);
+    await video.play();
     loop();
   }
 
@@ -91,8 +94,20 @@ export function createHandTracker({ onPoint, onStatus, onPinch }) {
     raf = requestAnimationFrame(loop);
     if (video.currentTime === lastVideoTime || video.readyState < 2) return;
     lastVideoTime = video.currentTime;
-    const now = performance.now();
+    step(performance.now());
+  }
+
+  // fps and detect cost, for profiling lag: window.__handStats = { fps, detectMs }
+  let frames = 0; let t0 = 0; let costSum = 0;
+  function step(now) {
+    if (!running) return;
+    const c0 = performance.now();
     const lm = landmarker.detectForVideo(video, now).landmarks?.[0];
+    costSum += performance.now() - c0; frames++;
+    if (now - t0 >= 1000) {
+      window.__handStats = { fps: Math.round((frames * 1000) / (now - t0)), detectMs: Math.round((costSum / frames) * 10) / 10 };
+      frames = 0; costSum = 0; t0 = now;
+    }
     draw(lm);
     if (!lm) {
       if (now - lastSeen > LOST_AFTER_MS) { setStatus('hand lost'); pinch.reset(); held = null; }
@@ -112,7 +127,8 @@ export function createHandTracker({ onPoint, onStatus, onPinch }) {
   function stop() {
     running = false; cancelAnimationFrame(raf);
     stream?.getTracks().forEach((t) => t.stop());
-    video?.remove(); canvas?.remove(); landmarker?.close();
+    if (!camera) video?.remove();
+    canvas?.remove(); landmarker?.close();
   }
 
   return { start, stop, record() {}, reset: async () => {}, resetLearning() {} };

@@ -4,6 +4,7 @@ const KEY = 'gaze-input';
 const CHOICES = [
   { mode: 'head', title: 'Eyes / head', sub: 'Turn your head or move your eyes' },
   { mode: 'hand', title: 'Hand', sub: 'Move a finger, pinch to select' },
+  { mode: 'head+hand', title: 'Head + hand', sub: 'Either works; the hand takes over when seen' },
   { mode: 'scan', title: 'Blink only', sub: 'Blink or press one switch' },
   { mode: 'mouse', title: 'Mouse / caregiver', sub: 'Click or touch' },
 ];
