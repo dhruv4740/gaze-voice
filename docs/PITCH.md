@@ -56,9 +56,11 @@ That is a **43× speedup**. For a patient in severe discomfort or respiratory di
 ### [1:25 - 1:45] Clinical & Multi-Language Features
 **Speaker 1:**  
 *"Patients aren't limited to canned responses:  
-1. **Patient-Initiated Topics:** A glance at 'I want to say something' triggers home controls (lights, fan, nurse call) and quick WhatsApp messages to family.  
-2. **Personalized Memory:** Our system remembers family names, medication schedules, and past choices, ranking them higher.  
-3. **Live Multilingual Translation:** With one glance, the patient can switch to Hindi (`hi-IN`) or Marathi (`mr-IN`), translating their intent for doctors or relatives."*
+1. **Clinical Pain & Body Map:** A single glance at '🩺 Pain' opens an 8-zone anatomical body map and 0-10 severity scale. Selecting 'Stomach 8/10' speaks immediately, logs with timestamps for the doctor summary, and triggers an urgent vibration on the caregiver's phone.  
+2. **Personality & Expression Tones:** 4 expression tones (Gentle, Urgent, Joking, Formal) let patients shape both the AI's predicted wording and the synthesized voice cadence to reflect their true feelings.  
+3. **Remote Caregiver Inquiries:** Caregivers can type questions directly from their phone companion app, appearing in real time in the patient's Heard strip ('📱 from phone') with instant role-based options.  
+4. **Patient-Initiated Topics & Home Controls:** A glance at 'I want to say something' triggers home controls (lights, fan, nurse call) and quick WhatsApp messages to family.  
+5. **Live Multilingual Translation:** With one glance, the patient can switch to Hindi (`hi-IN`) or Marathi (`mr-IN`), translating their intent for doctors or relatives."*
 
 ---
 

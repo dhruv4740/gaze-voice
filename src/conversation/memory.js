@@ -4,6 +4,8 @@ const STORAGE_MEMORY_KEY = 'gaze_voice_patient_memory';
 const STORAGE_LOG_KEY = 'gaze_voice_interaction_log';
 const STORAGE_FREQ_KEY = 'gaze_voice_reply_frequency';
 
+const STORAGE_PAIN_KEY = 'gaze_voice_pain_logs';
+
 const DEFAULT_MEMORY = {
   name: 'Aarav Sharma',
   condition: 'ALS / Locked-in speech impairment, uses eye-gaze',
@@ -12,6 +14,7 @@ const DEFAULT_MEMORY = {
   meds: 'Riluzole 50mg at 9:00 AM & 9:00 PM; Pain drops at 2:00 PM; Multivitamin with lunch',
   usualNeeds: 'Water with straw, pillow adjust, suction, fan on, light blanket',
   notes: 'Understands English, Hindi, and Marathi.',
+  selectedTone: 'gentle', // 'gentle' | 'urgent' | 'joking' | 'formal'
   pinnedReplies: {
     // e.g. 'agree': { text: 'Yes, absolutely', tag: 'Agree' }
   }
@@ -25,6 +28,7 @@ export function getMemory() {
     return {
       ...DEFAULT_MEMORY,
       ...parsed,
+      selectedTone: parsed.selectedTone || 'gentle',
       pinnedReplies: parsed.pinnedReplies || {}
     };
   } catch (err) {
@@ -71,7 +75,18 @@ export function togglePinnedReply(role, text, tag = 'Pinned') {
   }
 }
 
-export function logInteraction({ heard = '', reply = '', kind = 'conversation', category = 'general' }) {
+export function getSelectedTone() {
+  return getMemory().selectedTone || 'gentle';
+}
+
+export function setSelectedTone(tone) {
+  const mem = getMemory();
+  mem.selectedTone = tone || 'gentle';
+  saveMemory(mem);
+  return mem.selectedTone;
+}
+
+export function logInteraction({ heard = '', reply = '', kind = 'conversation', category = 'general', zone = null, level = null, score = null }) {
   try {
     const now = new Date();
     const entry = {
@@ -81,8 +96,11 @@ export function logInteraction({ heard = '', reply = '', kind = 'conversation', 
       dateStr: now.toISOString().split('T')[0],
       heard,
       reply,
-      kind, // 'conversation' | 'request' | 'spell' | 'emergency' | 'topic'
-      category
+      kind, // 'conversation' | 'request' | 'spell' | 'emergency' | 'topic' | 'pain'
+      category,
+      zone,
+      level,
+      score
     };
 
     const existingLog = getDailyLog();
@@ -99,6 +117,49 @@ export function logInteraction({ heard = '', reply = '', kind = 'conversation', 
     return entry;
   } catch (err) {
     console.warn('Failed to log interaction:', err);
+  }
+}
+
+export function logPainRecord({ zone, level, score, note = '' }) {
+  try {
+    const phrase = `My ${zone} hurts, ${level}, ${score} out of 10`;
+    const entry = logInteraction({
+      heard: '',
+      reply: phrase,
+      kind: 'pain',
+      category: 'pain',
+      zone,
+      level,
+      score
+    });
+
+    const now = new Date();
+    const painItem = {
+      id: entry?.id || `${Date.now()}`,
+      zone,
+      level,
+      score,
+      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: now.getTime(),
+      note
+    };
+
+    const existing = getPainLogs();
+    existing.push(painItem);
+    localStorage.setItem(STORAGE_PAIN_KEY, JSON.stringify(existing.slice(-50)));
+
+    return painItem;
+  } catch (err) {
+    console.warn('Failed to log pain:', err);
+  }
+}
+
+export function getPainLogs() {
+  try {
+    const raw = localStorage.getItem(STORAGE_PAIN_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
   }
 }
 

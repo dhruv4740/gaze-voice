@@ -5,7 +5,7 @@
 // full QWERTY keyboard screen, stop/listen audio tile, deduplication.
 
 import './conversation.css';
-import { getMemory, saveMemory, logInteraction, getDailyLog, getPinnedReplies, togglePinnedReply } from './memory.js';
+import { getMemory, saveMemory, logInteraction, getDailyLog, getPinnedReplies, togglePinnedReply, getSelectedTone, setSelectedTone, logPainRecord, getPainLogs } from './memory.js';
 import { CATEGORIES, getOfflineReplies, getOfflineRoleReplies } from './categories.js';
 import { predictReplies, predictWordCompletions } from './groq.js';
 import { SpeechListener, speakPhrase } from './speech.js';
@@ -15,11 +15,22 @@ import { TOPICS, dispatchHomeRequest, getWhatsAppShareUrl } from './home.js';
 import { LISTENER_LANGUAGES, translateText } from './translation.js';
 import { generateDailySummary } from './summary.js';
 
+const PAIN_ZONES = [
+  { id: 'head', label: 'Head', labelHi: 'सिर', icon: '🧠', desc: 'Frontal / Temples' },
+  { id: 'chest', label: 'Chest', labelHi: 'छाती', icon: '🫁', desc: 'Lungs / Sternum' },
+  { id: 'stomach', label: 'Stomach', labelHi: 'पेट', icon: '🫄', desc: 'Abdomen / Digestion' },
+  { id: 'back', label: 'Back', labelHi: 'पीठ', icon: '🔙', desc: 'Spine / Upper & Lower' },
+  { id: 'left_arm', label: 'Left Arm', labelHi: 'बायाँ हाथ', icon: '💪', desc: 'Shoulder / Arm' },
+  { id: 'right_arm', label: 'Right Arm', labelHi: 'दायाँ हाथ', icon: '💪', desc: 'Shoulder / Arm' },
+  { id: 'left_leg', label: 'Left Leg', labelHi: 'बायाँ पैर', icon: '🦵', desc: 'Thigh / Knee / Foot' },
+  { id: 'right_leg', label: 'Right Leg', labelHi: 'दायाँ पैर', icon: '🦵', desc: 'Thigh / Knee / Foot' }
+];
+
 export function startConversation(app) {
   let memory = getMemory();
   let patientLang = 'en-IN'; // patient's input language
   let listenerLang = 'en-IN'; // caregiver / listener language ('en-IN' | 'hi-IN' | 'mr-IN')
-  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'type' | 'profile' | 'topics' | 'topic_items' | 'summary' | 'onboarding'
+  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'type' | 'profile' | 'topics' | 'topic_items' | 'summary' | 'onboarding' | 'pain' | 'pain_scale' | 'pain_exact'
   let activeCategory = null;
   let activeTopic = null;
   let isEmergency = false;
@@ -28,6 +39,7 @@ export function startConversation(app) {
   let isLoadingSummary = false;
   let summaryReport = '';
   let heardText = 'Did you sleep well?';
+  let heardFrom = 'mic'; // 'mic' | 'phone'
   let showManualInput = false;
   let fatigueAlert = null; // 'mild' | 'high' | null
   let lastTranslation = null; // { original, translated, lang }
@@ -36,6 +48,13 @@ export function startConversation(app) {
   let isResting = false;
   let isAudioStopped = false;
   let lastUtteranceNormalized = '';
+
+  // Tone state (Round 5: Gentle, Urgent, Joking, Formal)
+  let currentTone = getSelectedTone() || 'gentle';
+
+  // Clinical Pain & Body Map state (Round 5)
+  let selectedPainZone = PAIN_ZONES[2]; // default stomach
+  let selectedPainLevel = 'mild';
 
   // Stable Board & Role-Based AI State (Round 4)
   let lastSpokenText = 'Yes, I slept well.';
@@ -81,6 +100,18 @@ export function startConversation(app) {
     isResting = !!e.detail?.resting;
   });
 
+  // Listen for remote questions from Caregiver Phone (Round 5)
+  window.addEventListener('aac:remote-question', (e) => {
+    const text = e.detail?.text;
+    const from = e.detail?.from || 'Caregiver Phone';
+    if (!text || !text.trim()) return;
+    heardFrom = 'phone';
+    heardText = text.trim();
+    history.push({ speaker: 'other', text: heardText });
+    handleNewUtterance(heardText, 'phone');
+    render();
+  });
+
   // Listen for fatigue events from Team A's gaze engine
   window.addEventListener('gaze:fatigue', (e) => {
     const level = e.detail?.level;
@@ -94,11 +125,12 @@ export function startConversation(app) {
   const listener = new SpeechListener({
     onTranscript: ({ text, isFinal }) => {
       heardText = text;
+      heardFrom = 'mic';
       if (isFinal) {
         if (speechDebounceTimer) clearTimeout(speechDebounceTimer);
         speechDebounceTimer = setTimeout(() => {
           history.push({ speaker: 'other', text });
-          handleNewUtterance(text);
+          handleNewUtterance(text, 'mic');
         }, 350);
       }
       render();
@@ -112,7 +144,7 @@ export function startConversation(app) {
   // Start listening by default (continuous)
   listener.start();
 
-  async function handleNewUtterance(text) {
+  async function handleNewUtterance(text, source = 'mic') {
     if (!text || !text.trim()) return;
 
     // Filter fragments under 3 words unless ending in '?'
@@ -130,7 +162,7 @@ export function startConversation(app) {
     lastUtteranceNormalized = normalized;
 
     // Contract event: aac:heard wakes the app!
-    window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text } }));
+    window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text, source } }));
     isResting = false;
 
     // 1. Instant feel: immediately display offline contextual role replies (0ms delay)
@@ -148,7 +180,8 @@ export function startConversation(app) {
         utterance: text,
         history,
         profile: memory,
-        language: patientLang
+        language: patientLang,
+        tone: currentTone
       });
       if (aiReplies && typeof aiReplies === 'object' && !isResting) {
         roleReplies = aiReplies;
@@ -201,6 +234,7 @@ export function startConversation(app) {
 
     // 2. Text-to-speech output (pausing speech recognition while speaking to prevent self-hearing)
     speakPhrase(textToSpeak, listenerLang, {
+      tone: currentTone,
       onStart: () => listener.pauseForSpeech(),
       onEnd: () => listener.resumeAfterSpeech(500)
     });
@@ -233,6 +267,65 @@ export function startConversation(app) {
     } else {
       updateChatBoardInPlace();
     }
+  }
+
+  function handlePainConfirm({ zone, level, score }) {
+    const isHi = patientLang.startsWith('hi');
+    const zoneName = isHi ? (zone?.labelHi || zone?.label || 'शरीर') : (zone?.label || 'body').toLowerCase();
+    const scoreVal = parseInt(score || '5', 10);
+    const levelStr = level || (scoreVal <= 3 ? 'mild' : scoreVal <= 6 ? 'moderate' : 'severe');
+
+    const spokenText = isHi
+      ? `मेरे ${zoneName} में दर्द है, ${levelStr === 'severe' ? 'बहुत तेज' : levelStr === 'moderate' ? 'मध्यम' : 'हल्का'}, 10 में से ${scoreVal}`
+      : `My ${zoneName} hurts, ${levelStr}, ${scoreVal} out of 10.`;
+
+    // 1. Text-to-speech with tone (Urgent if severe)
+    speakPhrase(spokenText, listenerLang, {
+      tone: scoreVal >= 7 ? 'urgent' : currentTone,
+      onStart: () => listener.pauseForSpeech(),
+      onEnd: () => listener.resumeAfterSpeech(500)
+    });
+
+    // 2. Contract event: aac:spoken
+    window.dispatchEvent(
+      new CustomEvent('aac:spoken', {
+        detail: {
+          text: spokenText,
+          lang: listenerLang,
+          originalText: spokenText
+        }
+      })
+    );
+
+    // 3. Log to memory.js (daily summary)
+    logPainRecord({
+      zone: zone?.label || 'Body',
+      level: levelStr,
+      score: scoreVal
+    });
+
+    // 4. Severe (7+) dispatches aac:request { kind: 'pain', label: 'Severe <zone> pain <X>/10' }
+    if (scoreVal >= 7) {
+      window.dispatchEvent(
+        new CustomEvent('aac:request', {
+          detail: {
+            kind: 'pain',
+            label: `Severe ${zone?.label || 'body'} pain ${scoreVal}/10`
+          }
+        })
+      );
+    }
+
+    // 5. Update interaction history and return cleanly to chat
+    history.push({ speaker: 'patient', text: spokenText });
+    lastSpokenText = spokenText;
+    if (!spokenHistory.includes(spokenText)) {
+      spokenHistory.unshift(spokenText);
+      if (spokenHistory.length > 5) spokenHistory.pop();
+    }
+    mode = 'chat';
+    chatMounted = false;
+    render();
   }
 
   function handleHomeAction(item) {
@@ -432,11 +525,38 @@ export function startConversation(app) {
         mode = 'categories';
       } else if (mode === 'topic_items') {
         mode = 'topics';
+      } else if (mode === 'pain_exact' || mode === 'pain_scale') {
+        mode = 'pain';
       } else {
         mode = 'chat';
         chatMounted = false;
       }
       render();
+    } else if (action === 'set-tone') {
+      currentTone = value || 'gentle';
+      setSelectedTone(currentTone);
+      const toneBtns = app.querySelectorAll('.conv-tile-tone');
+      toneBtns.forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.value === currentTone);
+      });
+      if (heardText && !isAiRequestInFlight) {
+        handleNewUtterance(heardText, heardFrom);
+      }
+    } else if (action === 'nav-pain') {
+      mode = 'pain';
+      chatMounted = false;
+      render();
+    } else if (action === 'pain-zone-select') {
+      selectedPainZone = PAIN_ZONES.find((z) => z.id === value) || PAIN_ZONES[0];
+      mode = 'pain_scale';
+      render();
+    } else if (action === 'pain-to-exact') {
+      mode = 'pain_exact';
+      render();
+    } else if (action === 'pain-confirm') {
+      const score = target.dataset.score || value || '8';
+      const level = target.dataset.level || (score <= 3 ? 'mild' : score <= 6 ? 'moderate' : 'severe');
+      handlePainConfirm({ zone: selectedPainZone, level, score });
     } else if (action === 'category-select') {
       activeCategory = CATEGORIES.find((c) => c.id === value) || null;
       mode = 'category_items';
@@ -559,6 +679,11 @@ export function startConversation(app) {
       }
     }
 
+    const phoneBadge = app.querySelector('.conv-phone-badge');
+    if (phoneBadge) {
+      phoneBadge.style.display = heardFrom === 'phone' ? 'inline-flex' : 'none';
+    }
+
     const micDot = app.querySelector('.conv-mic-dot');
     if (micDot) {
       micDot.classList.toggle('active', isListening);
@@ -662,6 +787,12 @@ export function startConversation(app) {
         otherTxt.textContent = isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else';
       }
     }
+
+    // 7. Update Tone Selector Row in place
+    const toneTiles = app.querySelectorAll('.conv-tile-tone');
+    toneTiles.forEach((tile) => {
+      tile.classList.toggle('is-active', tile.dataset.value === currentTone);
+    });
 
     // Update audio button in sidebar
     const audioBtn = app.querySelector('.conv-tile-audio');
@@ -890,6 +1021,7 @@ export function startConversation(app) {
           <div class="conv-heard-label">
             <span class="conv-mic-dot ${isListening ? 'active' : ''}"></span>
             Heard:
+            <span class="conv-phone-badge" style="display:${heardFrom === 'phone' ? 'inline-flex' : 'none'}">📱 from phone</span>
           </div>
           <div class="conv-heard-text ${heardText ? '' : 'placeholder'}">
             ${escapeHtml(heardText || (isListening ? 'Listening for speech...' : 'Microphone paused'))}
@@ -1014,6 +1146,12 @@ export function startConversation(app) {
           <div class="conv-tile-dwell-ring"></div>
         </button>
 
+        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-pain" style="border-color:#ff5252; background:rgba(255,82,82,0.12);">
+          <span class="conv-tile-tag">Health</span>
+          <span class="conv-tile-text">🩺 ${isHi ? 'दर्द' : 'Pain'}</span>
+          <div class="conv-tile-dwell-ring"></div>
+        </button>
+
         ${
           isAudioStopped
             ? `
@@ -1032,7 +1170,7 @@ export function startConversation(app) {
         `
         }
       `;
-    } else if (mode === 'type' || mode === 'spell') {
+    } else if (mode === 'type' || mode === 'spell' || mode === 'pain' || mode === 'pain_scale' || mode === 'pain_exact') {
       navTilesHtml = `
         <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
           <span class="conv-tile-tag">Return</span>
@@ -1137,7 +1275,27 @@ export function startConversation(app) {
             </button>
           </div>
 
-          <!-- 3. Fixed Role Slots (Agree, Decline, Need, Feeling, Ask Back, Something Else) -->
+          <!-- 3. Tone Selector Row (Gentle, Urgent, Joking, Formal) -->
+          <div class="conv-tone-row">
+            <button class="conv-tile conv-tile-tone ${currentTone === 'gentle' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="gentle" title="Gentle expression tone">
+              <span class="conv-tile-text">🌸 ${isHi ? 'कोमल' : 'Gentle'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-tone ${currentTone === 'urgent' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="urgent" title="Urgent expression tone">
+              <span class="conv-tile-text">⚡ ${isHi ? 'ज़रूरी' : 'Urgent'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-tone ${currentTone === 'joking' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="joking" title="Joking expression tone">
+              <span class="conv-tile-text">😄 ${isHi ? 'मज़ाकिया' : 'Joking'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-tile-tone ${currentTone === 'formal' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="formal" title="Formal expression tone">
+              <span class="conv-tile-text">👔 ${isHi ? 'औपचारिक' : 'Formal'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+
+          <!-- 4. Fixed Role Slots (Agree, Decline, Need, Feeling, Ask Back, Something Else) -->
           <div class="conv-role-grid">
             <!-- Slot 1: Agree -->
             <div class="conv-tile conv-tile-role ${pinnedReplies.agree ? 'is-pinned' : ''}" id="slot-agree" data-gaze-target data-action="reply" data-role="agree" data-value="${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}">
@@ -1347,6 +1505,114 @@ export function startConversation(app) {
           </div>
         </div>
       `;
+    } else if (mode === 'pain') {
+      mainContentHtml = `
+        <div class="conv-pain-board">
+          <div class="conv-pain-header">
+            <span>🩺 ${isHi ? 'दर्द का स्थान चुनें (सामने का दृश्य - 8 मुख्य भाग)' : 'Where does it hurt? Glance at a body zone (Front View)'}</span>
+            <span style="font-size:0.9rem; opacity:0.85;">8 Gaze Zones</span>
+          </div>
+          <div class="conv-pain-grid">
+            ${PAIN_ZONES.map(
+              (z) => `
+              <button class="conv-tile conv-pain-tile" data-gaze-target data-action="pain-zone-select" data-value="${z.id}">
+                <span class="conv-pain-icon">${z.icon}</span>
+                <span class="conv-pain-label">${isHi ? z.labelHi : z.label}</span>
+                <span class="conv-pain-sub">${z.desc}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `
+            ).join('')}
+          </div>
+        </div>
+      `;
+    } else if (mode === 'pain_scale') {
+      const zone = selectedPainZone || PAIN_ZONES[2];
+      mainContentHtml = `
+        <div class="conv-pain-scale-container">
+          <div class="conv-pain-header">
+            <span>🩺 ${zone.icon} ${isHi ? (zone.labelHi || zone.label) : zone.label} Pain — ${isHi ? 'तीव्रता चुनें (0-10)' : 'Select Severity (0-10 Scale)'}</span>
+            <span style="font-size:0.9rem; opacity:0.85;">Glance to Speak & Alert</span>
+          </div>
+          <div class="conv-pain-scale-grid">
+            <button class="conv-tile conv-pain-scale-tile scale-mild" data-gaze-target data-action="pain-confirm" data-level="mild" data-score="2">
+              <span class="conv-scale-score">2</span>
+              <span class="conv-scale-title">🟢 ${isHi ? 'हल्का' : 'Mild (1-3)'}</span>
+              <span class="conv-scale-sub">${isHi ? 'सहन करने योग्य' : 'Tolerable discomfort'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-pain-scale-tile scale-moderate" data-gaze-target data-action="pain-confirm" data-level="moderate" data-score="5">
+              <span class="conv-scale-score">5</span>
+              <span class="conv-scale-title">🟡 ${isHi ? 'मध्यम' : 'Moderate (4-6)'}</span>
+              <span class="conv-scale-sub">${isHi ? 'कष्टदायक' : 'Noticeable pain'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile conv-pain-scale-tile scale-severe" data-gaze-target data-action="pain-confirm" data-level="severe" data-score="8">
+              <span class="conv-scale-score">8</span>
+              <span class="conv-scale-title">🔴 ${isHi ? 'बहुत तेज' : 'Severe (7-10)'}</span>
+              <span class="conv-scale-sub">${isHi ? 'केयरगिवर फ़ोन अलर्ट' : 'Alerts Caregiver Phone 📱'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+          <div style="display:flex; gap:12px; height:54px;">
+            <button class="conv-tile" data-gaze-target data-action="pain-to-exact" style="flex:1; border-color:#ab47bc; background:rgba(171,71,188,0.12);">
+              <span class="conv-tile-text">🔢 ${isHi ? 'सटीक नंबर चुनें (0-10)' : 'Exact Number (0-10)'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-tile" data-gaze-target data-action="nav-pain" style="flex:1;">
+              <span class="conv-tile-text">⬅️ ${isHi ? 'दूसरा अंग चुनें' : 'Change Body Zone'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+        </div>
+      `;
+    } else if (mode === 'pain_exact') {
+      const zone = selectedPainZone || PAIN_ZONES[2];
+      const numbers = [
+        { score: 0, level: 'none', label: '0 None' },
+        { score: 1, level: 'mild', label: '1 Mild' },
+        { score: 2, level: 'mild', label: '2 Mild' },
+        { score: 3, level: 'mild', label: '3 Mild' },
+        { score: 4, level: 'moderate', label: '4 Mod' },
+        { score: 5, level: 'moderate', label: '5 Mod' },
+        { score: 6, level: 'moderate', label: '6 Mod' },
+        { score: 7, level: 'severe', label: '7 Severe ⚡' },
+        { score: 8, level: 'severe', label: '8 Severe ⚡' },
+        { score: 9, level: 'severe', label: '9 Critical 🚨' },
+        { score: 10, level: 'severe', label: '10 Extreme 🚨' },
+        { score: 'back', level: 'back', label: '⬅️ Back' }
+      ];
+
+      mainContentHtml = `
+        <div class="conv-pain-board">
+          <div class="conv-pain-header">
+            <span>🩺 ${zone.icon} ${isHi ? (zone.labelHi || zone.label) : zone.label} — ${isHi ? 'सटीक संख्या (0-10)' : 'Pick Exact Pain Score (0–10)'}</span>
+            <span style="font-size:0.9rem; opacity:0.85;">Scores 7-10 Alert Phone</span>
+          </div>
+          <div class="conv-pain-exact-grid">
+            ${numbers.map((item) => {
+              if (item.score === 'back') {
+                return `
+                  <button class="conv-tile conv-pain-exact-tile" data-gaze-target data-action="nav-pain" style="background:#171d2b;">
+                    <span class="conv-tile-text">⬅️ Back</span>
+                    <div class="conv-tile-dwell-ring"></div>
+                  </button>
+                `;
+              }
+              const isSevere = item.score >= 7;
+              const borderClr = item.score === 0 ? '#4caf50' : item.score <= 3 ? '#00e676' : item.score <= 6 ? '#ffc107' : '#ff1744';
+              const bgClr = item.score >= 7 ? 'rgba(255,23,68,0.18)' : 'rgba(255,255,255,0.05)';
+              return `
+                <button class="conv-tile conv-pain-exact-tile" data-gaze-target data-action="pain-confirm" data-score="${item.score}" data-level="${item.level}" style="border-color:${borderClr}; background:${bgClr};">
+                  <span class="conv-tile-text">${item.score}</span>
+                  <span class="exact-sub">${item.label}</span>
+                  <div class="conv-tile-dwell-ring"></div>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
     }
 
     app.innerHTML = `
@@ -1369,8 +1635,9 @@ export function startConversation(app) {
         const text = inputManual.value.trim();
         if (text) {
           heardText = text;
+          heardFrom = 'mic';
           history.push({ speaker: 'other', text });
-          handleNewUtterance(text);
+          handleNewUtterance(text, 'mic');
           showManualInput = false;
         }
       };

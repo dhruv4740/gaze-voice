@@ -136,15 +136,25 @@ export class SpeechListener {
   }
 }
 
-export function speakPhrase(text, lang = 'en-IN', { onStart, onEnd } = {}) {
+const TONE_SETTINGS = {
+  urgent: { rate: 1.15, pitch: 1.1 },
+  gentle: { rate: 0.9, pitch: 1.0 },
+  joking: { rate: 1.0, pitch: 1.15 },
+  formal: { rate: 0.95, pitch: 0.95 }
+};
+
+export function speakPhrase(text, lang = 'en-IN', { onStart, onEnd, tone = 'gentle' } = {}) {
   if (!('speechSynthesis' in window) || !text) return;
 
   window.speechSynthesis.cancel(); // cancel any ongoing speech
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = lang;
-  utterance.rate = 0.95; // slightly slower for high clarity
-  utterance.pitch = 1.0;
+
+  const tKey = (tone || 'gentle').toLowerCase();
+  const toneConfig = TONE_SETTINGS[tKey] || { rate: 0.95, pitch: 1.0 };
+  utterance.rate = toneConfig.rate;
+  utterance.pitch = toneConfig.pitch;
 
   if (onStart) utterance.onstart = onStart;
   if (onEnd) {

@@ -942,4 +942,221 @@
   border-color: #66101f !important;
 }
 
+/* --------------------------------------------------------------------------
+   Remote Question Phone Badge
+   -------------------------------------------------------------------------- */
+.conv-phone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 230, 118, 0.15);
+  border: 1px solid rgba(0, 230, 118, 0.4);
+  color: #00e676;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Tone Tiles Row
+   -------------------------------------------------------------------------- */
+.conv-tone-row {
+  display: flex;
+  gap: 8px;
+  height: 42px;
+  min-height: 42px;
+  flex-shrink: 0;
+}
+
+.conv-tile-tone {
+  flex: 1;
+  height: 100%;
+  min-height: 0 !important;
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  padding: 4px 10px !important;
+  background: #121824 !important;
+  border: 1px solid var(--conv-card-border) !important;
+  color: var(--conv-text-muted) !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.conv-tile-tone.is-active {
+  background: rgba(0, 229, 255, 0.15) !important;
+  border-color: var(--conv-accent) !important;
+  color: var(--conv-accent) !important;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+/* --------------------------------------------------------------------------
+   Pain & Body Map (8 Zones + Pain Scale)
+   -------------------------------------------------------------------------- */
+.conv-pain-board {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.conv-pain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 82, 82, 0.12);
+  border: 1px solid rgba(255, 82, 82, 0.35);
+  border-radius: 12px;
+  padding: 8px 16px;
+  color: #ff8a80;
+  font-size: 1.15rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.conv-pain-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.conv-pain-tile {
+  background: #141a29;
+  border: 2px solid #263347;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 150px;
+  min-width: 200px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.conv-pain-tile:hover {
+  border-color: #ff5252;
+  background: rgba(255, 82, 82, 0.12);
+  transform: translateY(-2px);
+}
+
+.conv-pain-tile .conv-pain-icon {
+  font-size: 2.2rem;
+}
+
+.conv-pain-tile .conv-pain-label {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.conv-pain-tile .conv-pain-sub {
+  font-size: 0.85rem;
+  color: var(--conv-text-muted);
+}
+
+/* Pain Scale Grid (3 Big Tiles: Mild, Moderate, Severe) */
+.conv-pain-scale-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+.conv-pain-scale-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.conv-pain-scale-tile {
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  min-width: 200px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.conv-pain-scale-tile.scale-mild {
+  background: rgba(0, 230, 118, 0.1);
+  border: 2px solid #00e676;
+  color: #b9f6ca;
+}
+
+.conv-pain-scale-tile.scale-moderate {
+  background: rgba(255, 193, 7, 0.1);
+  border: 2px solid #ffc107;
+  color: #ffe082;
+}
+
+.conv-pain-scale-tile.scale-severe {
+  background: rgba(255, 23, 68, 0.15);
+  border: 2px solid #ff1744;
+  color: #ff8a80;
+}
+
+.conv-pain-scale-tile .conv-scale-score {
+  font-size: 2.8rem;
+  font-weight: 800;
+}
+
+.conv-pain-scale-tile .conv-scale-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.conv-pain-scale-tile .conv-scale-sub {
+  font-size: 1rem;
+  opacity: 0.85;
+}
+
+/* Exact Number Grid (0-10) */
+.conv-pain-exact-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.conv-pain-exact-tile {
+  font-size: 2rem;
+  font-weight: 800;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.conv-pain-exact-tile .exact-sub {
+  font-size: 0.8rem;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+
 
