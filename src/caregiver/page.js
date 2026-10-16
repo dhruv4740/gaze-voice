@@ -2,6 +2,8 @@
 const $ = (id) => document.getElementById(id);
 const relayUrl = new URLSearchParams(location.search).get('relay') || `ws://${location.hostname}:8787`;
 let audio = null;
+// vibrate only after a tap: Chrome logs a blocked-call error otherwise
+const vibrate = (p) => { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(p); };
 
 const fmt = (t) => new Date(t || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -19,7 +21,7 @@ let alarm = null;
 function showAlert(t) {
   $('alert').hidden = false;
   $('alert-time').textContent = fmt(t);
-  const pulse = () => { beep(); navigator.vibrate?.([400, 200, 400, 200, 400]); };
+  const pulse = () => { beep(); vibrate([400, 200, 400, 200, 400]); };
   pulse();
   clearInterval(alarm);
   alarm = setInterval(pulse, 1500);
@@ -50,7 +52,7 @@ function addCard(text, t, cls = '') {
   b.onclick = () => d.remove();
   d.append(s, b);
   $('requests').prepend(d);
-  navigator.vibrate?.(200);
+  vibrate(200);
   beep();
 }
 

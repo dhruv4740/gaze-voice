@@ -64,7 +64,7 @@ body.gaze-clean #webgazerVideoContainer, body.gaze-clean #gaze-raw { display: no
 #gaze-rest .rest-note { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #fff; opacity: .25; font-size: 56px; }
 
 /* input picker */
-#gaze-picker { position: fixed; inset: 0; z-index: 1300; background: #0f1115; color: #fff; display: flex;
+#gaze-picker { position: fixed; inset: 0; z-index: 6000; background: #0f1115; color: #fff; display: flex;
   flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
 #gaze-picker h1 { font-size: 48px; margin: 0; }
 #gaze-picker .picker-groups { display: flex; gap: 24px; }
