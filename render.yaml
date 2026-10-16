@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: gaze-voice
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build:deploy
+    startCommand: npm start
+    envVars:
+      - key: VITE_GROQ_API_KEY
+        sync: false
+      - key: VITE_GROQ_MODEL
+        sync: false
+      - key: VITE_GEMINI_API_KEY
+        sync: false
+      - key: VITE_GEMINI_MODEL
+        sync: false

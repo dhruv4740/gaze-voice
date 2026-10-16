@@ -3,6 +3,8 @@
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HISTORY = 50;
@@ -12,11 +14,27 @@ const lanIps = () => Object.values(os.networkInterfaces()).flat()
   .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address)
   .filter((a) => !/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a)); // skip VPN/Tailscale (CGNAT) addresses
 
-// HTTP side: the patient page asks for the laptop's LAN address to build the QR code
-const server = http.createServer((req, res) => {
+// HTTP side: /relay-info gives the laptop's LAN address (QR code); everything else is the built app
+// from dist/ (one service for Railway/Render). Without a dist/ build every other path answers the same JSON.
+const DIST = path.resolve(import.meta.dirname, '..', 'dist');
+const hasDist = fs.existsSync(path.join(DIST, 'index.html'));
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.wasm': 'application/wasm', '.task': 'application/octet-stream', '.woff2': 'font/woff2', '.map': 'application/json' };
+const info = (res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify({ ips: lanIps(), port: PORT }));
+};
+const server = http.createServer((req, res) => {
+  const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (!hasDist || pathname === '/relay-info' || pathname === '/relay') return info(res);
+  let file = path.join(DIST, pathname.endsWith('/') ? pathname + 'index.html' : pathname);
+  if (!file.startsWith(DIST + path.sep) && file !== DIST) { res.statusCode = 403; return res.end('forbidden'); }
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.statusCode = 404; return res.end('not found'); }
+    res.setHeader('Content-Type', TYPES[path.extname(file)] || 'application/octet-stream');
+    if (pathname.startsWith('/assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    fs.createReadStream(file).pipe(res);
+  });
 });
 
 const wss = new WebSocketServer({ server });
