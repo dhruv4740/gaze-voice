@@ -19,7 +19,9 @@ export function createStats({ root }) {
   const errs = []; // pointer offset (px) at each selection: raw point vs target centre
   let fatigue = null; // latest fatigue snapshot, set via update()
 
-  window.addEventListener('gaze-select', () => {
+  let paused = false; // rest mode: stats frozen
+  window.addEventListener('gaze-select', (e) => {
+    if (paused || e.target?.hasAttribute?.('data-no-stats')) return;
     const now = performance.now();
     if (firstAt === null) firstAt = now;
     if (now - lastAt < IDLE_CAP_MS) { gapSum += now - lastAt; gaps++; }
@@ -73,6 +75,7 @@ export function createStats({ root }) {
   }
 
   return {
+    setPaused(p) { paused = p; if (!p) lastAt = performance.now(); },
     reset() { selections = 0; gapSum = 0; gaps = 0; words = 0; errs.length = 0; firstAt = null; lastAt = performance.now(); fatigue = null; },
     addError(px) { errs.push(px); if (errs.length > 40) errs.shift(); },
     update(f) { fatigue = f; },

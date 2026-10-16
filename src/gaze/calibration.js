@@ -17,6 +17,14 @@ export function dotPositions() {
 }
 
 // Resolves { meanError } once the user accepts the result.
+const COPY = {
+  head: 'Point at each dot with your NOSE, by turning your head.',
+  iris: 'Keep your head still, move only your eyes.',
+  eyes: 'Keep your head still, move only your eyes.',
+};
+const MIN_TRAVEL = 0.025; // head mode: a corner dot must move the nose this far (fraction of the frame) from the centre dot
+const MAX_RETRIES = 3;
+
 export function runCalibration({ root, tracker, getPoint, points = dotPositions(), clicksPerDot = CLICKS_PER_DOT, label = '' }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -36,6 +44,9 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
 
     let i = 0;
     let clicks = 0;
+    let retries = 0;
+    let dotStart = 0;
+    let centreMean = null;
     let timers = [];
     const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
     const dotCenter = () => {
@@ -48,7 +59,10 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
       clicks = 0;
       place(points[i]);
       dot.textContent = '';
-      msg.textContent = `Look at the dot (${i + 1}/${points.length}). A helper can also click it.`;
+      dotStart = tracker.count ? tracker.count() : 0;
+      const how = COPY[label] || 'Look at the dot.';
+      msg.textContent = `${how} (${i + 1}/${points.length}) A helper can also click the dot.`;
+      if (retries) msg.textContent = `Move your head more. ${how} (${i + 1}/${points.length})`;
       // restart the shrinking-ring animation that shows the dot is being read
       dot.style.setProperty('--ring-ms', `${DOT_SETTLE_MS + DOT_SAMPLE_MS}ms`);
       dot.classList.remove('calib-auto'); void dot.offsetWidth; dot.classList.add('calib-auto');
@@ -58,8 +72,20 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
       timers.push(setTimeout(next, DOT_SETTLE_MS + DOT_SAMPLE_MS));
     }
 
+    // head mode: a still head gives a tiny feature range and a hugely over-sensitive fit.
+    // If a corner dot's mean nose position is too close to the centre dot's, redo that dot.
+    function tooStill() {
+      if (label !== 'head' || !tracker.meanSince) return false;
+      const m = tracker.meanSince(dotStart);
+      if (!m) return false;
+      if (i === 0) { centreMean = m; return false; }
+      return centreMean && Math.hypot(m[0] - centreMean[0], m[1] - centreMean[1]) < MIN_TRAVEL;
+    }
+
     function next() {
       clearTimers();
+      if (tooStill() && retries < MAX_RETRIES) { retries++; tracker.trim(dotStart); showDot(); return; }
+      retries = 0;
       if (++i < points.length) showDot(); else accuracyCheck();
     }
 
@@ -95,6 +121,7 @@ export function runCalibration({ root, tracker, getPoint, points = dotPositions(
       const verdict = meanError === null ? 'No gaze detected: check lighting and face position.'
         : meanError < 100 ? 'Good: tiles will be easy to hit.'
         : meanError < 200 ? 'OK: usable with large tiles.'
+        : label === 'head' ? 'Poor: recalibrate and turn your head further toward each dot.'
         : 'Poor: recalibrate, face the light, keep your head still.';
       msg.innerHTML = '';
       const h = document.createElement('div');

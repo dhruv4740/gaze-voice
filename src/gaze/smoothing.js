@@ -10,6 +10,7 @@ export const PRESETS = {
   //          deadZone: ignore wobble smaller than this around the held point
   eyes: { minCutoff: 0.15, beta: 0.004, dCutoff: 1, deadZone: 30 },
   iris: { minCutoff: 0.1, beta: 0.003, dCutoff: 1, deadZone: 35 },
+  hand: { minCutoff: 0.8, beta: 0.01, dCutoff: 1, deadZone: 8 }, // the hand is precise: light smoothing
   head: { minCutoff: 0.1, beta: 0.003, dCutoff: 1, deadZone: 35 },
 };
 

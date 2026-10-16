@@ -13,7 +13,16 @@ const distToRect = (p, r) => {
 };
 
 // rects: [{ el, left, top, right, bottom }]. Returns the snapped element or null.
-export function createTargeter({ snap = SNAP_PX, margin = SWITCH_MARGIN_PX, switchMs = SWITCH_MS } = {}) {
+// Snap radius and switch margin shrink with dense targets (a keyboard of ~120 px keys), so the
+// point never snaps past a neighbouring key: snap <= 0.75 x the typical target size.
+export function scaledSnap(rects, snap = SNAP_PX, margin = SWITCH_MARGIN_PX) {
+  if (!rects.length) return { snap, margin };
+  const sizes = rects.map((r) => Math.sqrt((r.right - r.left) * (r.bottom - r.top))).sort((a, b) => a - b);
+  const s = Math.min(snap, 0.75 * sizes[sizes.length >> 1]);
+  return { snap: s, margin: Math.min(margin, s * (margin / snap)) };
+}
+
+export function createTargeter({ snap: SNAP = SNAP_PX, margin: MARGIN = SWITCH_MARGIN_PX, switchMs = SWITCH_MS } = {}) {
   let cur = null;
   let challenger = null;
   let challengerSince = 0;
@@ -21,6 +30,7 @@ export function createTargeter({ snap = SNAP_PX, margin = SWITCH_MARGIN_PX, swit
   return {
     update(point, rects, now) {
       if (point.x < 0 || !rects.length) { cur = null; challenger = null; return null; }
+      const { snap, margin } = scaledSnap(rects, SNAP, MARGIN);
       let best = null; let bestD = Infinity; let curD = Infinity;
       for (const r of rects) {
         const d = distToRect(point, r);

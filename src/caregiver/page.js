@@ -57,6 +57,7 @@ function addCard(text, t, cls = '') {
 function handle(m) {
   const stale = Date.now() - (m.t || 0) > 30000; // replayed history: feed only, no alarm
   if (m.type === 'spoken') addLine(`${m.text}${m.lang ? ` (${m.lang})` : ''}`, m.t);
+  else if (m.type === 'rest') addLine(m.resting ? 'Patient is resting' : 'Patient is awake', m.t);
   else if (m.type === 'emergency') { if (!stale) showAlert(m.t); addLine('EMERGENCY', m.t); }
   else if (stale) return;
   else if (m.type === 'request') addCard(m.label || m.kind, m.t);

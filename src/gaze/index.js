@@ -6,6 +6,7 @@ import { createTargeter, createDwell } from './select.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
+import { createRest } from './rest.js';
 import { startCaregiverLink } from '../caregiver/patient.js';
 
 const DEFAULT_DWELL_MS = 1200;
@@ -31,12 +32,23 @@ export function startGaze({ mode = 'mouse', root }) {
   const params = new URLSearchParams(location.search);
   const sw = document.createElement('select');
   sw.id = 'gaze-mode';
-  for (const m of ['mouse', 'eyes', 'iris', 'head']) sw.add(new Option(m, m, false, m === mode));
+  for (const m of ['mouse', 'eyes', 'iris', 'head', 'hand']) sw.add(new Option(m, m, false, m === mode));
   sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
   ui.appendChild(sw);
 
   const stats = createStats({ root });
   const fatigue = createFatigue();
+  const restBtn = document.createElement('button');
+  restBtn.id = 'gaze-rest-btn';
+  const rest = createRest({
+    root,
+    idleMs: (Number(params.get('restafter')) || 20) * 1000,
+    auto: params.get('rest') !== '0',
+    onChange: (r) => { stats.setPaused(r); restBtn.textContent = r ? 'Wake' : 'Rest'; },
+  });
+  restBtn.textContent = 'Rest';
+  restBtn.onclick = () => rest.toggle();
+  ui.appendChild(restBtn);
   window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
   setInterval(() => stats.update(fatigue.stats()), 1000);
   const pageStart = performance.now();
@@ -65,6 +77,7 @@ export function startGaze({ mode = 'mouse', root }) {
       if (closed) blinkTarget = dwell.el;
     },
     onLongBlink: () => {
+      if (rest.longBlink(performance.now())) return; // resting: two long blinks wake, nothing else
       const el = dwell.el || (blinkTarget && blinkTarget.isConnected ? blinkTarget : null);
       if (el && blinkBox.checked) { dwell.select(); selectNow(el); }
     },
@@ -72,11 +85,37 @@ export function startGaze({ mode = 'mouse', root }) {
 
   let point = { x: -1, y: -1 };
   let calibrating = false;
-  const setPoint = (x, y) => { point = { x, y }; };
+  let everTracked = false;
+  const setPoint = (x, y) => { point = { x, y }; if (x >= 0) everTracked = true; };
   const smoother = createPointSmoother(PRESETS[mode] || PRESETS.head);
   // raw tracker samples go through One Euro + dead zone; (-1,-1) means "no face"
+  // sensitivity (0.5-2.0) scales the pointer's distance from the screen centre, so lower = a
+  // bigger head/eye movement per screen distance. Persisted. Not applied to mouse or hand.
+  let gain = Math.min(2, Math.max(0.5, Number(localStorage.getItem('gaze-gain')) || 1));
+  const gainOn = mode === 'head' || mode === 'iris' || mode === 'eyes';
+  const gainBox = document.createElement('label');
+  gainBox.id = 'gaze-gain-label';
+  const gainSlider = document.createElement('input');
+  gainSlider.type = 'range'; gainSlider.id = 'gaze-gain'; gainSlider.min = '0.5'; gainSlider.max = '2'; gainSlider.step = '0.05';
+  gainSlider.value = String(gain);
+  const gainText = document.createElement('span');
+  const setGain = (g) => {
+    gain = Math.min(2, Math.max(0.5, Math.round(g * 20) / 20));
+    gainSlider.value = String(gain);
+    gainText.textContent = ` sens ${gain.toFixed(2)}`;
+    localStorage.setItem('gaze-gain', String(gain));
+  };
+  gainSlider.oninput = () => setGain(Number(gainSlider.value));
+  gainBox.append(gainSlider, gainText);
+  setGain(gain);
+  if (gainOn) ui.appendChild(gainBox);
   const setRaw = (x, y) => {
     if (x < 0) { smoother.reset(); setPoint(-1, -1); return; }
+    if (gainOn && gain !== 1) {
+      const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
+      x = Math.min(window.innerWidth, Math.max(0, cx + (x - cx) * gain));
+      y = Math.min(window.innerHeight, Math.max(0, cy + (y - cy) * gain));
+    }
     const p = smoother.filter(x, y, performance.now());
     setPoint(p.x, p.y);
   };
@@ -99,23 +138,26 @@ export function startGaze({ mode = 'mouse', root }) {
     }, 33);
   }
 
-  if (mode === 'eyes' || mode === 'head' || mode === 'iris') {
+  if (mode === 'eyes' || mode === 'head' || mode === 'iris' || mode === 'hand') {
     showStatus('starting camera…');
     // dynamic imports keep the TensorFlow / MediaPipe bundles out of mouse mode
     const load = mode === 'eyes'
       ? import('./eyes.js').then((m) => m.createEyesTracker)
       : mode === 'iris'
         ? import('./iris.js').then((m) => m.createIrisTracker)
-        : import('./head.js').then((m) => m.createHeadTracker);
+        : mode === 'hand'
+          ? import('./hand.js').then((m) => m.createHandTracker)
+          : import('./head.js').then((m) => m.createHeadTracker);
     const calibOpts = mode === 'eyes' ? {} : { clicksPerDot: 3 };
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
-        onBlink: (l, r, t) => { fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
+        onPinch: () => { const el = dwell.el; if (el) { dwell.select(); selectNow(el); } }, // hand mode: pinch = instant select
+        onBlink: (l, r, t) => { if (!rest.resting) fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
-          if (s === 'face lost') setRaw(-1, -1);
+          if (/ lost$/.test(s)) setRaw(-1, -1);
         },
       });
       return tracker.start().then(() => {
@@ -124,6 +166,7 @@ export function startGaze({ mode = 'mouse', root }) {
         window.__gazeReadyMs = ready;
         resetLearning = tracker.resetLearning ? tracker.resetLearning.bind(tracker) : null;
         learner = tracker.learn ? tracker.learn.bind(tracker) : null;
+        if (mode === 'hand') return null; // hand mode needs no calibration
         const recal = document.createElement('button');
         recal.id = 'gaze-recal';
         recal.textContent = 'Recalibrate';
@@ -155,7 +198,12 @@ export function startGaze({ mode = 'mouse', root }) {
   window.addEventListener('keydown', (e) => {
     if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.key === '{' || e.key === '}' || e.code === 'BracketLeft' || e.code === 'BracketRight') {
+      if (gainOn) { setGain(gain + (e.code === 'BracketRight' || e.key === '}' ? 0.1 : -0.1)); showStatus(`sensitivity ${gain.toFixed(2)}`, 'ok'); e.preventDefault(); }
+      return;
+    }
     const k = e.key.toLowerCase();
+    if (k === 'p') { rest.toggle(); e.preventDefault(); return; }
     if (k === 'r') {
       stats.reset(); fatigue.reset(); if (resetLearning) resetLearning();
       showStatus('demo reset', 'ok');
@@ -174,7 +222,7 @@ export function startGaze({ mode = 'mouse', root }) {
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
     // every confirmed selection is a calibration sample + one point on the accuracy sparkline
-    if (!calibrating && !(mode === 'mouse' && !jitter) && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
+    if (!calibrating && !rest.resting && !(mode === 'mouse' && !jitter) && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
       const b = el.getBoundingClientRect();
       const cx = (b.left + b.right) / 2; const cy = (b.top + b.bottom) / 2;
       stats.addError(Math.hypot(point.x - cx, point.y - cy));
@@ -205,12 +253,15 @@ export function startGaze({ mode = 'mouse', root }) {
       if (plainMouse) {
         const hit = document.elementFromPoint(point.x, point.y);
         target = hit && hit.closest('[data-gaze-target]');
+        if (rest.resting && !rest.allowed(target)) target = null;
       } else {
-        rects = collectRects();
+        rects = rest.filterRects(collectRects());
         target = targeter.update(point, rects, now);
       }
     }
 
+    if (rest.quiet) target = null;
+    rest.tick(now, { calibrating, faceMissing: mode !== 'mouse' && everTracked && point.x < 0 });
     const r = dwell.update(target, now, (el) => (el.dataset.gazeDwell ? Number(el.dataset.gazeDwell) : 1200 * fatigue.dwellScale));
     if (r.el !== hoverEl) { hoverEl = r.el; hoverStart = now; }
     if (hovered && hovered !== r.el) { hovered.classList.remove('gaze-hover'); hovered.style.setProperty('--dwell', 0); hovered = null; }
@@ -219,7 +270,7 @@ export function startGaze({ mode = 'mouse', root }) {
       r.el.classList.add('gaze-hover');
       r.el.style.setProperty('--dwell', r.progress);
     }
-    if (r.fired) { fatigue.selected(now - hoverStart); selectNow(r.fired); }
+    if (r.fired) { if (!rest.resting) fatigue.selected(now - hoverStart); selectNow(r.fired); }
 
     // cursor: centre of the snapped target for camera modes, else the pointer itself
     const c = !plainMouse && target ? targeter.center(target, rects) : null;
