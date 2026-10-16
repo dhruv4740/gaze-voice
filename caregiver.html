@@ -7,15 +7,15 @@
     <link rel="stylesheet" href="/src/caregiver/caregiver.css" />
   </head>
   <body>
-    <header><h1>Caregiver</h1><span id="conn" class="off">connecting…</span></header>
-    <button id="enable">Tap to enable sound &amp; vibration</button>
+    <header><h1>Caregiver</h1><span id="conn" class="off">connecting...</span></header>
+    <button id="enable">Enable sound and vibration</button>
     <section id="requests"></section>
     <section id="feed"></section>
     <form id="ask">
       <div id="chips"></div>
       <div class="row">
-        <input id="q" type="text" maxlength="300" placeholder="Ask a question…" autocomplete="off" enterkeyhint="send" />
-        <button type="button" id="mic" hidden aria-label="Speak a question">🎤</button>
+        <input id="q" type="text" maxlength="300" placeholder="Ask a question" autocomplete="off" enterkeyhint="send" />
+        <button type="button" id="mic" hidden aria-label="Speak a question"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
         <button type="submit" id="send">Send</button>
       </div>
       <label id="speak-row"><input type="checkbox" id="speak" /> Also speak aloud on laptop</label>

@@ -245,6 +245,7 @@ test('10. X-ray mode toggles with Shift+X, draws, and throws nothing', async ({ 
   const drawn = await page.evaluate(() => { const c = document.getElementById('gaze-xray'); return c.getContext('2d').getImageData(20, 20, 1, 1).data[3]; });
   expect(drawn).toBeGreaterThan(0);
   await page.screenshot({ path: 'test-results/xray-mouse.png' });
+  await page.click('#gaze-controls-btn');
   await page.click('#gaze-xray-btn');
   await expect(page.locator('#gaze-xray')).toBeHidden();
   expect(errs).toEqual([]);
