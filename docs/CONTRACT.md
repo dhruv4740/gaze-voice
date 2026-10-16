@@ -26,6 +26,9 @@ Dispatch on `window`; Team A forwards them over the WebSocket relay to `caregive
 - Team A also dispatches `new CustomEvent('gaze:fatigue', { detail: { level } })` (level
   `'mild' | 'high'`); Team B may react (for example a "Take a break?" tile).
 
+## Scan mode (`?mode=scan`, Team A)
+Row-column scanning for blink-only or one-switch users. The scan highlights `[data-gaze-target]` elements row by row (tops within 40 px), then items in the chosen row, using the same `gaze-hover` + `--dwell` visuals (rows also get `gaze-scan-row`). Select = long blink, Space/Enter, or a click (clicks are swallowed in scan mode, except inside `#gaze-ui` or `[data-scan-ignore]`). It respects rest mode and `data-gaze-always`.
+
 ## Rest mode (Midas-touch fix, Team A)
 While resting, dwell and blink selection are off everywhere and the screen is dimmed with one big Wake target.
 - `gaze:rest` `{ resting: true|false }` is dispatched on `window` when rest starts/ends. Stop listening or speaking while `resting`.
@@ -35,7 +38,7 @@ While resting, dwell and blink selection are off everywhere and the screen is di
 - Stats, fatigue and learning are frozen while resting.
 
 ## Entry points (called from `src/main.js`)
-- Team A: `startGaze({ mode, root })`, mode `'mouse' | 'eyes' | 'head'`.
+- Team A: `startGaze({ mode, root })`, mode `'mouse' | 'eyes' | 'iris' | 'head' | 'hand' | 'scan'`, or omitted: then the saved input choice is used, or the input picker is shown first (Team A). `src/main.js` passes `?mode=` or nothing.
 - Team B: `startConversation(appElement)`.
 
 ## Ownership

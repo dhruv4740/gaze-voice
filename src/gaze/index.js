@@ -7,11 +7,21 @@ import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
 import { createRest } from './rest.js';
+import { createScanner, DEFAULT_STEP_MS } from './scan.js';
+import { pickInput, savedInput, forgetInput } from './picker.js';
 import { startCaregiverLink } from '../caregiver/patient.js';
 
 const DEFAULT_DWELL_MS = 1200;
 
-export function startGaze({ mode = 'mouse', root }) {
+// No mode given: use the saved input choice, or ask with the input picker.
+export function startGaze({ mode, root }) {
+  if (mode) return run(mode, root);
+  const saved = savedInput();
+  if (saved) return run(saved, root);
+  return pickInput(root).then((m) => run(m, root));
+}
+
+function run(mode, root) {
   const cursor = document.createElement('div');
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
@@ -32,9 +42,15 @@ export function startGaze({ mode = 'mouse', root }) {
   const params = new URLSearchParams(location.search);
   const sw = document.createElement('select');
   sw.id = 'gaze-mode';
-  for (const m of ['mouse', 'eyes', 'iris', 'head', 'hand']) sw.add(new Option(m, m, false, m === mode));
+  for (const m of ['mouse', 'eyes', 'iris', 'head', 'hand', 'scan']) sw.add(new Option(m, m, false, m === mode));
   sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
   ui.appendChild(sw);
+  const changeBtn = document.createElement('button');
+  changeBtn.id = 'gaze-change-input';
+  changeBtn.textContent = 'Change input';
+  changeBtn.onclick = () => { forgetInput(); params.delete('mode'); location.search = params.toString(); };
+  ui.appendChild(changeBtn);
+  if (mode === 'scan') document.body.classList.add('gaze-scan');
 
   const stats = createStats({ root });
   const fatigue = createFatigue();
@@ -69,7 +85,7 @@ export function startGaze({ mode = 'mouse', root }) {
   blinkBox.checked = localStorage.getItem('gaze-blink') !== '0';
   blinkBox.onchange = () => localStorage.setItem('gaze-blink', blinkBox.checked ? '1' : '0');
   blinkLabel.append(blinkBox, ' blink select');
-  if (mode === 'head' || mode === 'iris') ui.appendChild(blinkLabel);
+  if (mode === 'head' || mode === 'iris' || mode === 'scan') ui.appendChild(blinkLabel);
   let blinkTarget = null; // what was hovered when the eyes closed
   const blink = createBlinkDetector({
     onChange: (closed) => {
@@ -77,11 +93,51 @@ export function startGaze({ mode = 'mouse', root }) {
       if (closed) blinkTarget = dwell.el;
     },
     onLongBlink: () => {
+      if (mode === 'scan') { if (blinkBox.checked) scanSelect(); return; } // blink is the scan switch
       if (rest.longBlink(performance.now())) return; // resting: two long blinks wake, nothing else
       const el = dwell.el || (blinkTarget && blinkTarget.isConnected ? blinkTarget : null);
       if (el && blinkBox.checked) { dwell.select(); selectNow(el); }
     },
   });
+
+  // ---- scan mode: row-column scanning driven by one switch (long blink, Space/Enter, click) ----
+  const scanner = createScanner({ stepMs: Number(localStorage.getItem('gaze-scan-ms')) || DEFAULT_STEP_MS });
+  let scanLit = []; // elements currently highlighted by the scan
+  let lastScanPick = performance.now();
+  const clearScan = () => {
+    for (const el of scanLit) { el.classList.remove('gaze-hover', 'gaze-scan-row'); el.style.setProperty('--dwell', 0); }
+    scanLit = [];
+  };
+  if (mode === 'scan') {
+    const stepLabel = document.createElement('label');
+    stepLabel.id = 'gaze-step-label';
+    const stepSlider = document.createElement('input');
+    stepSlider.type = 'range'; stepSlider.min = '600'; stepSlider.max = '3000'; stepSlider.step = '100';
+    stepSlider.value = String(Number(localStorage.getItem('gaze-scan-ms')) || DEFAULT_STEP_MS);
+    const stepText = document.createElement('span');
+    const setStep = (ms) => { scanner.setStep(ms); stepText.textContent = ` step ${(ms / 1000).toFixed(1)}s`; localStorage.setItem('gaze-scan-ms', String(ms)); };
+    stepSlider.oninput = () => setStep(Number(stepSlider.value));
+    stepLabel.append(stepSlider, stepText);
+    setStep(Number(stepSlider.value));
+    ui.appendChild(stepLabel);
+  }
+  const isTypingTarget = (t) => /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName) || t?.isContentEditable;
+  function scanSelect() {
+    const el = scanner.select(performance.now());
+    if (el && el.isConnected) { fatigue.selected(performance.now() - lastScanPick); lastScanPick = performance.now(); clearScan(); selectNow(el); }
+  }
+  if (mode === 'scan') {
+    // any USB switch shows up as Space/Enter or a click; clicks are swallowed so a tile under
+    // the pointer is not also activated directly (Team B listens to click as well as gaze-select)
+    window.addEventListener('keydown', (e) => {
+      if ((e.key !== ' ' && e.key !== 'Enter') || e.repeat || e.shiftKey || isTypingTarget(e.target)) return;
+      e.preventDefault(); e.stopPropagation(); scanSelect();
+    }, true);
+    window.addEventListener('click', (e) => {
+      if (e.target.closest?.('#gaze-ui, #gaze-picker, [data-scan-ignore]') || isTypingTarget(e.target)) return;
+      e.preventDefault(); e.stopPropagation(); scanSelect();
+    }, true);
+  }
 
   let point = { x: -1, y: -1 };
   let calibrating = false;
@@ -138,7 +194,15 @@ export function startGaze({ mode = 'mouse', root }) {
     }, 33);
   }
 
-  if (mode === 'eyes' || mode === 'head' || mode === 'iris' || mode === 'hand') {
+  if (mode === 'scan') {
+    showStatus('scan: Space / Enter / click / long blink');
+    import('./head.js').then((m) => m.createBlinkTracker({
+      onPoint: () => {},
+      onBlink: (l, r, t) => { if (!rest.resting) fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
+      onStatus: () => {},
+    }).start()).then(() => showStatus('scan: blink, Space, Enter or click', 'ok'))
+      .catch(() => showStatus('no camera: use Space, Enter or click', 'bad'));
+  } else if (mode === 'eyes' || mode === 'head' || mode === 'iris' || mode === 'hand') {
     showStatus('starting camera…');
     // dynamic imports keep the TensorFlow / MediaPipe bundles out of mouse mode
     const load = mode === 'eyes'
@@ -245,6 +309,25 @@ export function startGaze({ mode = 'mouse', root }) {
 
   function tick(now) {
     window.dispatchEvent(new CustomEvent('gaze:point', { detail: point }));
+
+    if (mode === 'scan') {
+      if (rest.quiet) { clearScan(); requestAnimationFrame(tick); return; }
+      const lit = scanner.update(now, rest.filterRects(collectRects()));
+      const keep = new Set(lit ? lit.els : []);
+      for (const el of scanLit) if (!keep.has(el)) { el.classList.remove('gaze-hover', 'gaze-scan-row'); el.style.setProperty('--dwell', 0); }
+      scanLit = [];
+      if (lit) {
+        for (const el of lit.els) {
+          el.classList.add('gaze-hover');
+          el.classList.toggle('gaze-scan-row', lit.kind === 'row');
+          el.style.setProperty('--dwell', lit.progress);
+          scanLit.push(el);
+        }
+        if (lit.kind === 'item') lit.els[0].scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      }
+      requestAnimationFrame(tick);
+      return;
+    }
 
     let target = null;
     let rects = [];

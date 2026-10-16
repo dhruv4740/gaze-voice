@@ -4,8 +4,8 @@ import { startGaze } from './gaze/index.js';
 import { startConversation } from './conversation/index.js';
 
 const params = new URLSearchParams(location.search);
-// ?mode=mouse | eyes | iris | head; default head (steadiest), falls back to mouse if the camera is denied
-const mode = params.get('mode') || 'head';
+// ?mode=mouse | eyes | iris | head | hand | scan. No ?mode: the saved input choice, or the input picker.
+const mode = params.get('mode') || null;
 
 startConversation(document.getElementById('app'));
 startGaze({ mode, root: document.getElementById('gaze-root') });
