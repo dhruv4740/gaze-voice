@@ -41,10 +41,12 @@ canvas.gaze-hand-skeleton { z-index: 901; opacity: .8; }
 #gaze-ui > #gaze-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; background: none; border: 0; cursor: default; }
 #gaze-chips .chip { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--g-bg); color: var(--g-muted); border: 1px solid var(--g-border); }
 #gaze-chips .chip-in { color: var(--g-text); }
-#caregiver-qr { position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; background: var(--g-surface) !important; color: var(--g-muted) !important; border: 1px solid var(--g-border);
+#caregiver-qr { position: absolute; bottom: 0; right: 100%; margin-right: 8px; background: var(--g-surface) !important; color: var(--g-muted) !important; border: 1px solid var(--g-border);
   border-radius: 8px !important; padding: 10px !important; font-size: 11px; max-width: 220px; word-break: break-all; cursor: default !important; }
 #caregiver-qr canvas { display: block; border-radius: 4px; margin-bottom: 6px; }
 #caregiver-qr[hidden] { display: none; }
+/* short windows: tighter panel so it fits with the QR beside it */
+@media (max-height: 820px) { #gaze-ui { gap: 4px; } #gaze-ui > * { padding: 4px 9px; } }
 
 #gaze-stats { position: fixed; right: 12px; top: 12px; z-index: 1200; padding: 12px 16px; border-radius: 10px; background: var(--g-surface);
   border: 1px solid var(--g-border); color: var(--g-text); font: 13px/1.6 system-ui, -apple-system, "Segoe UI", Inter, sans-serif; min-width: 240px; }
