@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gaze Voice - Caregiver</title>
+    <link rel="stylesheet" href="/src/caregiver/caregiver.css" />
+  </head>
+  <body>
+    <header><h1>Caregiver</h1><span id="conn" class="off">connecting…</span></header>
+    <button id="enable">Tap to enable sound &amp; vibration</button>
+    <section id="requests"></section>
+    <section id="feed"></section>
+    <div id="alert" hidden>
+      <div>EMERGENCY</div>
+      <small id="alert-time"></small>
+      <button id="dismiss">Dismiss</button>
+    </div>
+    <script type="module" src="/src/caregiver/page.js"></script>
+  </body>
+</html>

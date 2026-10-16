@@ -5,6 +5,7 @@ import { createPointSmoother, PRESETS } from './smoothing.js';
 import { createTargeter, createDwell } from './select.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
+import { startCaregiverLink } from '../caregiver/patient.js';
 
 const DEFAULT_DWELL_MS = 1200;
 
@@ -34,6 +35,7 @@ export function startGaze({ mode = 'mouse', root }) {
   ui.appendChild(sw);
 
   const stats = createStats({ root });
+  startCaregiverLink({ ui });
   const statsBtn = document.createElement('button');
   statsBtn.textContent = 'Stats';
   statsBtn.onclick = () => stats.toggle();
