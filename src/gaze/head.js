@@ -184,3 +184,8 @@ export function createHeadTracker(opts) {
     },
   });
 }
+
+// Blink-only tracker for scan mode: opens the face tracker for blendshapes, produces no pointer.
+export function createBlinkTracker(opts) {
+  return createFaceTracker({ ...opts, features: (lm) => [lm[NOSE_TIP].x, lm[NOSE_TIP].y], makeModel: () => null });
+}

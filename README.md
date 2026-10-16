@@ -59,3 +59,15 @@ and the browser Web Speech API.
 ### Rest mode
 
 Stops the "it always has to select something" problem. Resting dims the screen and disables dwell and blink selection except a big **Wake** target (top centre, dwell 2 s) and elements with `data-gaze-always` (emergency). Rest starts ~1 s after a reply is spoken, after 20 s without a selection, when the face is lost for 2 s, from the HUD **Rest** button or **Shift+P**. Wake with the target, a double long blink, a heard question (`aac:heard`) or the emergency tile. Contract details are in `docs/CONTRACT.md`; `?rest=0` disables the automatic entries.
+
+### Input modes
+
+No `?mode` shows a "How can you move?" picker on first load (choice saved in localStorage; the HUD **Change input** button resets it). `?mode=` always wins and is not saved.
+
+| mode | for | select |
+|---|---|---|
+| `head` | head/nose pointing (default choice for "Eyes / head") | dwell, long blink |
+| `eyes`, `iris` | webcam eye tracking | dwell, long blink (iris) |
+| `hand` | finger pointing | dwell, pinch |
+| `scan` | blink only or one switch | row-column scan; long blink, Space/Enter or click picks |
+| `mouse` | caregiver / testing | click |
