@@ -29,11 +29,14 @@ Dispatch on `window`; Team A forwards them over the WebSocket relay to `caregive
 ## Scan mode (`?mode=scan`, Team A)
 Row-column scanning for blink-only or one-switch users. The scan highlights `[data-gaze-target]` elements row by row (tops within 40 px), then items in the chosen row, using the same `gaze-hover` + `--dwell` visuals (rows also get `gaze-scan-row`). Select = long blink, Space/Enter, or a click (clicks are swallowed in scan mode, except inside `#gaze-ui` or `[data-scan-ignore]`). It respects rest mode and `data-gaze-always`.
 
+## Selection safety (Team A)
+Dwell starts only after the snapped target has been stable for 300 ms and the pointer is slow (< ~400 px/s), so sweeping across the screen never selects. While the pointer is fast, snapping is frozen (stay on the current target or none) and the raw pointer is shown. After any selection (dwell, pinch, blink) nothing else is selected for a refractory period (default 1.5 s; tiles dim meanwhile), except `data-gaze-always` elements. Pinch selects only when locked on. Per-patient HUD sliders: dwell time (0.6-3 s, per input mode, default 1.2 s, hand 1.0 s) and the refractory pause (0.5-3 s). Selection events are unchanged.
+
 ## Rest mode (Midas-touch fix, Team A)
 While resting, dwell and blink selection are off everywhere and the screen is dimmed with one big Wake target.
 - `gaze:rest` `{ resting: true|false }` is dispatched on `window` when rest starts/ends. Stop listening or speaking while `resting`.
 - Team B dispatches `new CustomEvent('aac:heard', { detail: { text } })` when a new question is heard: it wakes the app.
-- Team A enters rest ~1 s after speech ends (after `aac:spoken`), after 20 s without a selection or click, when the face is lost for 2 s, via the HUD Rest button or Shift+P. Wake: dwell 2 s on the Wake target, a double long blink, `aac:heard`, or selecting an always-on element. (`?rest=0` turns the automatic entries off, `?restafter=SECONDS` sets the idle time.)
+- Rest is **manual only**: the app never enters it by itself (no rest after `aac:spoken`, on idle, or on face lost; `?rest=` / `?restafter=` are gone). Enter via the HUD Pause button or Shift+P. Wake: dwell 2 s on the Wake target, a double long blink, `aac:heard` (a heard question wakes a manual rest), or selecting an always-on element.
 - Put `data-gaze-always="1"` on a `data-gaze-target` that must stay selectable in rest (the emergency tile). Selecting it also wakes the app.
 - Stats, fatigue and learning are frozen while resting.
 

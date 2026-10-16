@@ -3,7 +3,7 @@
 // ---- tuning ----
 export const SNAP_PX = 150; // snap to a target only if its rect is within this distance
 export const SWITCH_MARGIN_PX = 60; // another target must be this much closer to take over...
-export const SWITCH_MS = 150; // ...for this long
+export const SWITCH_MS = 200; // ...for this long (the challenger must lead this long at low speed)
 export const GRACE_MS = 300; // a slip off the target shorter than this keeps dwell progress
 
 const distToRect = (p, r) => {
@@ -28,8 +28,10 @@ export function createTargeter({ snap: SNAP = SNAP_PX, margin: MARGIN = SWITCH_M
   let challengerSince = 0;
 
   return {
-    update(point, rects, now) {
+    // `fast`: the pointer is sweeping. Snapping freezes: keep the current target (or none).
+    update(point, rects, now, fast = false) {
       if (point.x < 0 || !rects.length) { cur = null; challenger = null; return null; }
+      if (fast) { challenger = null; if (cur && !rects.some((r) => r.el === cur)) cur = null; return cur; }
       const { snap, margin } = scaledSnap(rects, SNAP, MARGIN);
       let best = null; let bestD = Infinity; let curD = Infinity;
       for (const r of rects) {
@@ -61,12 +63,12 @@ export function createTargeter({ snap: SNAP = SNAP_PX, margin: MARGIN = SWITCH_M
 // dwelling on (or just selected) is replaced by a fresh copy at the same place. Match a
 // new element to the old one by action + value + position instead of identity.
 const SAME_SPOT_PX = 30;
-const sigOf = (el) => {
+export const sigOf = (el) => {
   if (!el || typeof el.getBoundingClientRect !== 'function') return null;
   const r = el.getBoundingClientRect();
   return { a: el.dataset?.action || '', v: el.dataset?.value || '', x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
 };
-const sameSpot = (sig, el) => {
+export const sameSpot = (sig, el) => {
   const t = sig && sigOf(el);
   return !!t && t.a === sig.a && t.v === sig.v && Math.hypot(t.x - sig.x, t.y - sig.y) < SAME_SPOT_PX;
 };
@@ -105,6 +107,10 @@ export function createDwell({ graceMs = GRACE_MS, defaultMs = 1200 } = {}) {
         return { el: null, progress: 0, fired: done };
       }
       return { el, progress, fired: null };
+    },
+    // is `target` the element just selected (still locked until the pointer leaves it)?
+    holds(target) {
+      return !!target && !!locked && (target === locked || (!locked.isConnected && sameSpot(lockedSig, target)));
     },
     // Blink: select the element being dwelled on right now.
     select() {

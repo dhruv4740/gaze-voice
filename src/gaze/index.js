@@ -2,7 +2,7 @@
 // Modes: mouse (placeholder), eyes (WebGazer). Contract: docs/CONTRACT.md.
 import './gaze.css';
 import { createPointSmoother, PRESETS } from './smoothing.js';
-import { createTargeter, createDwell } from './select.js';
+import { createInteraction, REFRACTORY_MS } from './interaction.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
 import { createFatigue } from './fatigue.js';
@@ -96,15 +96,34 @@ function run(modeStr, root, selectStr) {
   const fatigue = createFatigue();
   const restBtn = document.createElement('button');
   restBtn.id = 'gaze-rest-btn';
+  // rest is manual only (HUD Pause / Shift+P): the app never pauses itself
   const rest = createRest({
     root,
-    idleMs: (Number(params.get('restafter')) || 20) * 1000,
-    auto: params.get('rest') !== '0',
-    onChange: (r) => { stats.setPaused(r); restBtn.textContent = r ? 'Wake' : 'Rest'; },
+    onChange: (r) => { stats.setPaused(r); restBtn.textContent = r ? 'Wake' : 'Pause'; },
   });
-  restBtn.textContent = 'Rest';
+  restBtn.textContent = 'Pause';
   restBtn.onclick = () => rest.toggle();
   ui.appendChild(restBtn);
+
+  // per-patient timing: dwell time (per input mode) and the pause after every selection
+  const lsNum = (k, d) => Number(localStorage.getItem(k)) || d;
+  const dwellKey = `gaze-dwell-ms:${mode}`;
+  let dwellMs = Math.min(3000, Math.max(600, lsNum(dwellKey, mode === 'hand' ? 1000 : 1200)));
+  let refractoryMs = Math.min(3000, Math.max(500, lsNum('gaze-refractory-ms', REFRACTORY_MS)));
+  const timing = (id, label, min, max, get, set) => {
+    const wrap = document.createElement('label');
+    wrap.id = id;
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = String(min); slider.max = String(max); slider.step = '100';
+    const text = document.createElement('span');
+    const show = () => { slider.value = String(get()); text.textContent = ` ${label} ${(get() / 1000).toFixed(1)}s`; };
+    slider.oninput = () => { set(Number(slider.value)); show(); };
+    show();
+    wrap.append(slider, text);
+    ui.appendChild(wrap);
+  };
+  if (mode !== 'scan') timing('gaze-dwell-label', 'dwell', 600, 3000, () => dwellMs, (v) => { dwellMs = v; localStorage.setItem(dwellKey, String(v)); });
+  if (mode !== 'scan') timing('gaze-refractory-label', 'pause', 500, 3000, () => refractoryMs, (v) => { refractoryMs = v; localStorage.setItem('gaze-refractory-ms', String(v)); });
   window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
   setInterval(() => stats.update(fatigue.stats()), 1000);
   const pageStart = performance.now();
@@ -284,7 +303,7 @@ function run(modeStr, root, selectStr) {
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
-        onPinch: () => { const el = dwell.el; if (el && sel.has('pinch') && !rest.resting) { dwell.select(); selectNow(el, 'pinch'); } },
+        onPinch: () => { const el = inter.pinchTarget(performance.now()); if (el && sel.has('pinch') && !rest.resting) { dwell.select(); selectNow(el, 'pinch'); } }, // only when locked on and not cooling down
         onBlink: (l, r, t) => { if (!rest.resting) fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
         onStatus: (s, from) => {
           if (isCombo) {
@@ -358,14 +377,15 @@ function run(modeStr, root, selectStr) {
     }, true);
   }
 
-  const targeter = createTargeter();
-  const dwell = createDwell();
+  const inter = createInteraction({ dwellMs: (el) => (el.dataset.gazeDwell ? Number(el.dataset.gazeDwell) : dwellMs * fatigue.dwellScale), refractoryMs: () => refractoryMs });
+  const { targeter, dwell } = inter;
   let hovered = null;
   let hoverEl = null;
   let hoverStart = 0;
 
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el, via = 'dwell') {
+    if (mode !== 'scan' && !inter.accept(el, performance.now())) return; // refractory: no second selection yet
     lastSelect = via;
     // every confirmed selection is a calibration sample + one point on the accuracy sparkline
     if (!calibrating && !rest.resting && (mode === 'mouse' ? jitter : !mouseActive) && !handLead() && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
@@ -411,35 +431,32 @@ function run(modeStr, root, selectStr) {
       return;
     }
 
-    let target = null;
     let rects = [];
     const plainMouse = mode === 'mouse' && !jitter; // exact hit-testing, no snapping
+    let hit;
     if (!calibrating) {
       if (plainMouse) {
-        const hit = document.elementFromPoint(point.x, point.y);
-        target = hit && hit.closest('[data-gaze-target]');
-        if (rest.resting && !rest.allowed(target)) target = null;
-      } else {
-        rects = rest.filterRects(collectRects());
-        target = targeter.update(point, rects, now);
-      }
+        const el = document.elementFromPoint(point.x, point.y);
+        hit = el && el.closest('[data-gaze-target]');
+        if (rest.resting && !rest.allowed(hit)) hit = null;
+      } else rects = rest.filterRects(collectRects());
     }
-
-    if (rest.quiet) target = null;
-    rest.tick(now, { calibrating, faceMissing: mode !== 'mouse' && everTracked && point.x < 0 });
-    const r = dwell.update(target, now, (el) => (el.dataset.gazeDwell ? Number(el.dataset.gazeDwell) : 1200 * fatigue.dwellScale));
+    const f = inter.frame(point, rects, now, { hit: plainMouse && !calibrating ? hit : undefined, quiet: calibrating || rest.quiet });
+    const target = f.target; const r = f.r;
+    document.body.classList.toggle('gaze-cooldown', f.cooling && mode !== 'scan');
     if (r.el !== hoverEl) { hoverEl = r.el; hoverStart = now; }
-    if (hovered && hovered !== r.el) { hovered.classList.remove('gaze-hover'); hovered.style.setProperty('--dwell', 0); hovered = null; }
-    if (r.el) {
-      hovered = r.el;
-      r.el.classList.add('gaze-hover');
-      r.el.style.setProperty('--dwell', sel.has('dwell') ? r.progress : 0);
+    const hl = f.hl;
+    if (hovered && hovered !== hl) { hovered.classList.remove('gaze-hover'); hovered.style.setProperty('--dwell', 0); hovered = null; }
+    if (hl) {
+      hovered = hl;
+      hl.classList.add('gaze-hover');
+      hl.style.setProperty('--dwell', hl === r.el && sel.has('dwell') ? r.progress : 0);
     }
-    if (r.fired && sel.has('dwell')) { if (!rest.resting) fatigue.selected(now - hoverStart); selectNow(r.fired, 'dwell'); }
+    if (r.fired && sel.has('dwell')) { if (!rest.resting && !f.cooling) fatigue.selected(now - hoverStart); selectNow(r.fired, 'dwell'); }
 
     // cursor: centre of the snapped target for camera modes, else the pointer itself
     const c = !plainMouse && target ? targeter.center(target, rects) : null;
-    const shown = c && !rawLead() ? c : point; // the hand's cursor follows the raw pointer; snapping still picks the target
+    const shown = c && !rawLead() && !f.fast ? c : point; // the hand's cursor follows the raw pointer; snapping still picks the target
     cursor.style.left = `${shown.x}px`;
     cursor.style.top = `${shown.y}px`;
     rawDot.style.left = `${point.x}px`;

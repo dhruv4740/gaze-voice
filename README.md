@@ -59,7 +59,7 @@ and the browser Web Speech API.
 
 ### Rest mode
 
-Stops the "it always has to select something" problem. Resting dims the screen and disables dwell and blink selection except a big **Wake** target (top centre, dwell 2 s) and elements with `data-gaze-always` (emergency). Rest starts ~1 s after a reply is spoken, after 20 s without a selection, when the face is lost for 2 s, from the HUD **Rest** button or **Shift+P**. Wake with the target, a double long blink, a heard question (`aac:heard`) or the emergency tile. Contract details are in `docs/CONTRACT.md`; `?rest=0` disables the automatic entries.
+Resting dims the screen and disables dwell and blink selection except a big **Wake** target (top centre, dwell 2 s) and elements with `data-gaze-always` (emergency). Rest is **manual only**: HUD **Pause** or **Shift+P**. Wake with the target, a double long blink, a heard question (`aac:heard`) or the emergency tile. Contract details are in `docs/CONTRACT.md`.
 
 ### Input modes
 
@@ -73,6 +73,10 @@ No `?mode` shows a "How can you move?" picker on first load (choice saved in loc
 | `head+hand` (also `iris+hand`) | head, or the hand once it is visible | dwell, pinch, long blink, Space/Enter |
 | `scan` | blink only or one switch | row-column scan; long blink, Space/Enter or click picks |
 | `mouse` | caregiver / testing | click |
+
+### Selection safety and timing
+
+A dwell starts only after the snapped target has been stable 300 ms with the pointer slow (< 400 px/s); fast sweeps never select, and snapping freezes while the pointer is fast. After any selection there is a 1.5 s pause with no selection (tiles dim). HUD sliders set dwell time (per input mode, default 1.2 s, hand 1.0 s) and the pause; both persist. Pinch needs the pointer locked on.
 
 ### Start-screen input picker (multi-select)
 

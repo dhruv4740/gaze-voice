@@ -92,3 +92,7 @@ body.gaze-clean #webgazerVideoContainer, body.gaze-clean #gaze-raw { display: no
 /* scan mode: the row being scanned gets an outline, items use gaze-hover + --dwell */
 .gaze-scan-row { outline: 6px solid #ffb300 !important; outline-offset: 3px; }
 body.gaze-scan #gaze-cursor, body.gaze-scan #gaze-raw { display: none !important; }
+
+/* cooldown after a selection: tiles dim a little and the cursor goes hollow */
+body.gaze-cooldown [data-gaze-target]:not([data-gaze-always]):not(#gaze-wake) { opacity: .6; transition: opacity .15s; }
+body.gaze-cooldown #gaze-cursor { opacity: .45; }
