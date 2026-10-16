@@ -8,6 +8,7 @@ const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/f
 const NOSE_TIP = 1;
 const LOST_AFTER_MS = 800;
 const RECENT = 6;
+const BLINK_HOLD = 0.4;
 
 // Least squares for out = a*u + b*v + c over the samples (normal equations, 3x3).
 export function fitAffine(samples, key) {
@@ -35,7 +36,8 @@ export function fitAffine(samples, key) {
 
 // `features(landmarks)` -> number[]; `makeModel(pairs)` -> predict(f) => [x, y] | null,
 // where pairs are { f, x, y } calibration samples. Head and iris modes differ only in these.
-export function createFaceTracker({ onPoint, onStatus, features, makeModel }) {
+// `onBlink(left, right, t)` gets eye-closure blendshape scores every frame.
+export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeModel }) {
   let video = null;
   let stream = null;
   let landmarker = null;
@@ -62,6 +64,7 @@ export function createFaceTracker({ onPoint, onStatus, features, makeModel }) {
         baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
         runningMode: 'VIDEO',
         numFaces: 1,
+        outputFaceBlendshapes: !!onBlink,
       });
     } catch (err) {
       stream.getTracks().forEach((t) => t.stop());
@@ -95,6 +98,14 @@ export function createFaceTracker({ onPoint, onStatus, features, makeModel }) {
     }
     lastSeen = now;
     setStatus('tracking');
+    if (onBlink) {
+      const cats = res.faceBlendshapes && res.faceBlendshapes[0] && res.faceBlendshapes[0].categories;
+      const score = (name) => (cats && cats.find((c) => c.categoryName === name)?.score) || 0;
+      const l = score('eyeBlinkLeft'); const r = score('eyeBlinkRight');
+      onBlink(l, r, now);
+      // lids covering the iris throw the estimate off: hold the pointer while eyes are closed
+      if (l > BLINK_HOLD && r > BLINK_HOLD) return;
+    }
     recent.push(f);
     if (recent.length > RECENT) recent.shift();
     const p = predict && predict(f);
