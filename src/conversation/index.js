@@ -1,7 +1,8 @@
 // Team B (teammate) owns everything in src/conversation/.
 // Implements the complete AAC conversation interface: layout, speech recognition,
 // Groq & Gemini replies, speech synthesis, categories, patient profile, spell mode, emergency.
-// Contract events (window 'aac:spoken', 'aac:emergency', 'aac:request', 'gaze:fatigue').
+// Round 3: Judge demo mode, live speed proof, new patient onboarding, accessibility polish,
+// click double-fire prevention, speech debouncing, contract events.
 
 import './conversation.css';
 import { getMemory, saveMemory, logInteraction, getDailyLog } from './memory.js';
@@ -18,7 +19,7 @@ export function startConversation(app) {
   let memory = getMemory();
   let patientLang = 'en-IN'; // patient's input language
   let listenerLang = 'en-IN'; // caregiver / listener language ('en-IN' | 'hi-IN' | 'mr-IN')
-  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'profile' | 'topics' | 'topic_items' | 'summary'
+  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'profile' | 'topics' | 'topic_items' | 'summary' | 'onboarding'
   let activeCategory = null;
   let activeTopic = null;
   let isEmergency = false;
@@ -30,6 +31,22 @@ export function startConversation(app) {
   let showManualInput = false;
   let fatigueAlert = null; // 'mild' | 'high' | null
   let lastTranslation = null; // { original, translated, lang }
+
+  // Accessibility & Judge Demo Proof State
+  let isJudgeMode = true; // Enabled for judging demo
+  let isHighContrast = false;
+  let isLargeText = false;
+  let liveProof = null; // Speedup benchmark
+  let speechDebounceTimer = null;
+  let isAiRequestInFlight = false;
+  let lastGazeSelectTime = 0;
+  let lastGazeTarget = null;
+
+  // Check onboarding on first run
+  const isOnboarded = localStorage.getItem('gaze_voice_onboarded') === 'true';
+  if (!isOnboarded) {
+    mode = 'onboarding';
+  }
 
   const history = [
     { speaker: 'other', text: 'Did you sleep well?' }
@@ -51,13 +68,16 @@ export function startConversation(app) {
     }
   });
 
-  // Speech recognition listener
+  // Speech recognition listener with debouncing
   const listener = new SpeechListener({
     onTranscript: ({ text, isFinal }) => {
       heardText = text;
       if (isFinal) {
-        history.push({ speaker: 'other', text });
-        handleNewUtterance(text);
+        if (speechDebounceTimer) clearTimeout(speechDebounceTimer);
+        speechDebounceTimer = setTimeout(() => {
+          history.push({ speaker: 'other', text });
+          handleNewUtterance(text);
+        }, 350);
       }
       render();
     },
@@ -71,12 +91,18 @@ export function startConversation(app) {
   listener.start();
 
   async function handleNewUtterance(text) {
-    // 1. Instant feel: immediately display offline contextual replies
+    if (!text || !text.trim()) return;
+
+    // 1. Instant feel: immediately display offline contextual replies (0ms delay)
     replies = getOfflineReplies(text, patientLang);
     isLoadingReplies = true;
     render();
 
-    // 2. Fetch AI replies (Groq -> Gemini fallback) and swap in
+    // 2. Throttle: ignore concurrent duplicate requests
+    if (isAiRequestInFlight) return;
+    isAiRequestInFlight = true;
+
+    // 3. Fetch AI replies (Groq -> 4s Gemini fallback -> offline)
     try {
       const aiReplies = await predictReplies({
         utterance: text,
@@ -91,12 +117,27 @@ export function startConversation(app) {
       console.warn('AI prediction failed, keeping instant replies:', err);
     } finally {
       isLoadingReplies = false;
+      isAiRequestInFlight = false;
       render();
     }
   }
 
   async function handleSelectPhrase(phraseText, kind = 'conversation', category = 'general') {
     if (!phraseText) return;
+
+    // Live proof calculation vs traditional letter-by-letter scanning
+    const charCount = phraseText.trim().length;
+    const scanningTime = (charCount * 1.5).toFixed(1);
+    const gazeTime = 1.2;
+    const speedup = Math.round((charCount * 1.5) / gazeTime);
+    liveProof = {
+      phrase: phraseText,
+      chars: charCount,
+      scanningSecs: scanningTime,
+      scanningSelections: charCount,
+      gazeSecs: gazeTime,
+      speedup: Math.max(1, speedup)
+    };
 
     // 1. Live translation if listener language is different from English
     let textToSpeak = phraseText;
@@ -205,11 +246,8 @@ export function startConversation(app) {
     }
   }
 
-  // Event delegation for both gaze-select and mouse click
-  function onSelect(e) {
-    const target = e.target.closest('[data-gaze-target]');
-    if (!target) return;
-
+  // Unified action handler with click double-fire prevention
+  function handleAction(target) {
     const action = target.dataset.action;
     const value = target.dataset.value;
 
@@ -285,6 +323,15 @@ export function startConversation(app) {
       toggleListenerLanguage();
     } else if (action === 'toggle-mic') {
       listener.toggle();
+    } else if (action === 'toggle-demo') {
+      isJudgeMode = !isJudgeMode;
+      render();
+    } else if (action === 'toggle-contrast') {
+      isHighContrast = !isHighContrast;
+      render();
+    } else if (action === 'toggle-size') {
+      isLargeText = !isLargeText;
+      render();
     } else if (action === 'toggle-input') {
       showManualInput = !showManualInput;
       render();
@@ -302,10 +349,33 @@ export function startConversation(app) {
     }
   }
 
-  app.addEventListener('gaze-select', onSelect);
-  app.addEventListener('click', onSelect);
+  // Double-fire prevention: gaze-select sets timestamp and suppresses click on same target within 500ms
+  function onGazeSelect(e) {
+    const target = e.target.closest('[data-gaze-target]');
+    if (!target) return;
+    lastGazeSelectTime = performance.now();
+    lastGazeTarget = target;
+    handleAction(target);
+  }
+
+  function onClick(e) {
+    const target = e.target.closest('[data-gaze-target]');
+    if (!target) return;
+    const now = performance.now();
+    if (target === lastGazeTarget && (now - lastGazeSelectTime) < 500) {
+      return; // Ignore duplicate click event
+    }
+    handleAction(target);
+  }
+
+  app.addEventListener('gaze-select', onGazeSelect);
+  app.addEventListener('click', onClick);
 
   function render() {
+    // Accessibility modifier classes
+    app.classList.toggle('contrast-high', isHighContrast);
+    app.classList.toggle('text-large', isLargeText);
+
     const isHi = patientLang.startsWith('hi');
     const listenerObj = LISTENER_LANGUAGES.find((l) => l.code === listenerLang) || LISTENER_LANGUAGES[0];
 
@@ -331,7 +401,67 @@ export function startConversation(app) {
       return;
     }
 
-    // 2. Doctor/Family Daily Summary Modal
+    // 2. First-Run Patient Onboarding Modal
+    if (mode === 'onboarding') {
+      app.innerHTML = `
+        <div class="conv-modal-overlay">
+          <div class="conv-modal-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h2 style="margin:0; color:var(--conv-accent);">👋 Welcome to Gaze Voice</h2>
+              <span style="font-size:0.85rem; color:var(--conv-accent);">Patient Onboarding</span>
+            </div>
+            <p style="color:var(--conv-text-muted); font-size:0.95rem; margin-top:0;">
+              Caregiver: Please customize the patient profile below to enable personalized AI predictions and medication reminders.
+            </p>
+            <div class="conv-form-group">
+              <label>Patient Name</label>
+              <input type="text" id="onboard-name" value="${escapeHtml(memory.name)}" />
+            </div>
+            <div class="conv-form-group">
+              <label>Condition & Needs</label>
+              <input type="text" id="onboard-condition" value="${escapeHtml(memory.condition)}" />
+            </div>
+            <div class="conv-form-group">
+              <label>Family & Caregivers</label>
+              <input type="text" id="onboard-family" value="${escapeHtml(memory.familyNames)}" />
+            </div>
+            <div class="conv-form-group">
+              <label>Scheduled Meds & Times</label>
+              <input type="text" id="onboard-meds" value="${escapeHtml(memory.meds)}" />
+            </div>
+            <div class="conv-form-group">
+              <label>Likes & Interests</label>
+              <input type="text" id="onboard-likes" value="${escapeHtml(memory.likes)}" />
+            </div>
+            <div class="conv-modal-actions">
+              <button class="conv-btn-pill active" id="btn-save-onboarding" style="padding:10px 24px; font-size:1.05rem;">
+                🚀 Start Communication
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      const btnOnboard = app.querySelector('#btn-save-onboarding');
+      if (btnOnboard) {
+        btnOnboard.onclick = () => {
+          memory = {
+            ...memory,
+            name: app.querySelector('#onboard-name').value.trim() || memory.name,
+            condition: app.querySelector('#onboard-condition').value.trim() || memory.condition,
+            familyNames: app.querySelector('#onboard-family').value.trim() || memory.familyNames,
+            meds: app.querySelector('#onboard-meds').value.trim() || memory.meds,
+            likes: app.querySelector('#onboard-likes').value.trim() || memory.likes
+          };
+          saveMemory(memory);
+          localStorage.setItem('gaze_voice_onboarded', 'true');
+          mode = 'chat';
+          render();
+        };
+      }
+      return;
+    }
+
+    // 3. Doctor/Family Daily Summary Modal
     if (mode === 'summary') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
@@ -368,7 +498,7 @@ export function startConversation(app) {
       return;
     }
 
-    // 3. Caregiver Memory & Profile Settings Modal (Keyboard-friendly)
+    // 4. Caregiver Memory & Profile Settings Modal (Keyboard-friendly)
     if (mode === 'profile') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
@@ -429,7 +559,7 @@ export function startConversation(app) {
       return;
     }
 
-    // 4. Top Bar (Heard Strip, Translation Subtitle, Caregiver Tools)
+    // 5. Top Bar (Heard Strip, Translation Subtitle, Caregiver Tools, Accessibility)
     const topBarHtml = `
       <header class="conv-topbar">
         <div class="conv-heard-container">
@@ -447,10 +577,19 @@ export function startConversation(app) {
           <button class="conv-btn-pill ${isListening ? 'active' : ''}" data-action="toggle-mic">
             🎤 ${isListening ? 'Mic On' : 'Mic Off'}
           </button>
+          <button class="conv-btn-pill ${isJudgeMode ? 'active' : ''}" data-action="toggle-demo" title="Toggle Judge Demo Mode">
+            🎯 Demo
+          </button>
+          <button class="conv-btn-pill ${isHighContrast ? 'active' : ''}" data-action="toggle-contrast" title="High Contrast Mode">
+            🌓 Contrast
+          </button>
+          <button class="conv-btn-pill ${isLargeText ? 'active' : ''}" data-action="toggle-size" title="Bigger Text Toggle">
+            Aa Size
+          </button>
           <button class="conv-btn-pill" data-action="toggle-input" title="Manual Text Box Fallback">
             ⌨️ Text
           </button>
-          <button class="conv-btn-pill" data-action="open-summary" title="Daily Summary">
+          <button class="conv-btn-pill" data-action="open-summary" title="Daily Medical Summary">
             📊 Summary
           </button>
           <button class="conv-btn-pill" data-action="open-profile" title="Patient Profile & Meds">
@@ -458,6 +597,36 @@ export function startConversation(app) {
           </button>
         </div>
       </header>
+
+      ${
+        isJudgeMode
+          ? `
+        <div class="conv-judge-guide">
+          <div>
+            🎯 <strong>Judge Prompt:</strong> Ask <em>"Did you sleep well?"</em> (or type below) &rarr; hover a reply tile for 1.2s to speak!
+          </div>
+          <div style="font-size:0.9rem; opacity:0.85;">
+            Follow-up: <em>"Are you thirsty?"</em> &bull; Try <strong>🔤 Spell</strong> &bull; Hold <strong>🚨 EMERGENCY</strong>
+          </div>
+        </div>
+      `
+          : ''
+      }
+
+      ${
+        liveProof
+          ? `
+        <div class="conv-proof-banner">
+          <div>
+            ⚡ <strong>Live Proof:</strong> Letter-by-letter scanning would take <strong>${liveProof.scanningSelections} selections</strong> (~${liveProof.scanningSecs}s). Gaze Voice: <strong>1 glance in ${liveProof.gazeSecs}s</strong>!
+          </div>
+          <div class="conv-proof-badge">
+            ${liveProof.speedup}x FASTER
+          </div>
+        </div>
+      `
+          : ''
+      }
 
       ${
         lastTranslation
@@ -483,7 +652,7 @@ export function startConversation(app) {
       }
     `;
 
-    // 5. Side Navigation Rail (All large gaze targets >= 200x150px with >=40px gap)
+    // 6. Side Navigation Rail (All large gaze targets >= 200x150px with >=40px gap)
     const navRailHtml = mode === 'spell' ? `
       <nav class="conv-nav-rail">
         <button class="conv-tile conv-tile-nav" data-gaze-target data-action="spell-speak" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.15);">
@@ -580,7 +749,7 @@ export function startConversation(app) {
       </nav>
     `;
 
-    // 6. Main Interactive Grid depending on Mode
+    // 7. Main Interactive Grid depending on Mode
     let mainContentHtml = '';
 
     if (mode === 'chat') {

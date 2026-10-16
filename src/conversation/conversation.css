@@ -31,6 +31,79 @@
   user-select: none;
 }
 
+/* Accessibility: High-Contrast Mode */
+#app.contrast-high {
+  --conv-bg: #000000;
+  --conv-card-bg: #04060a;
+  --conv-card-hover: #0c121e;
+  --conv-card-border: #00e5ff;
+  --conv-text-main: #ffffff;
+  --conv-text-muted: #e2e8f0;
+}
+
+#app.contrast-high .conv-tile {
+  border: 3px solid #00e5ff;
+  background: #000000;
+  color: #ffffff;
+}
+
+#app.contrast-high .conv-tile-emergency {
+  border-color: #ff1744;
+}
+
+/* Accessibility: Large Text Scale (readable from 1.5m away) */
+#app.text-large .conv-tile {
+  font-size: 2.1rem;
+}
+
+#app.text-large .conv-heard-text {
+  font-size: 1.7rem;
+}
+
+#app.text-large .conv-tile-tag {
+  font-size: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Judge Demo Mode & Live Speed Proof
+   -------------------------------------------------------------------------- */
+.conv-judge-guide {
+  background: #190f2b;
+  border: 2px solid #ce93d8;
+  color: #f3e5f5;
+  padding: 10px 24px;
+  margin: 12px 32px 0 32px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.15rem;
+  box-shadow: 0 4px 20px rgba(171, 71, 188, 0.25);
+}
+
+.conv-proof-banner {
+  background: #091322;
+  border: 2px solid var(--conv-accent);
+  color: #e1f5fe;
+  padding: 12px 24px;
+  margin: 10px 32px 0 32px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.05rem;
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.2);
+}
+
+.conv-proof-badge {
+  background: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
 /* --------------------------------------------------------------------------
    Top Bar: Heard Strip + Status & Controls
    -------------------------------------------------------------------------- */

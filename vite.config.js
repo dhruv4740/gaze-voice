@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         caregiver: resolve(import.meta.dirname, 'caregiver.html'),
+        landing: resolve(import.meta.dirname, 'landing.html'),
       },
     },
   },
