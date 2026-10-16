@@ -47,11 +47,27 @@ export function createTargeter({ snap = SNAP_PX, margin = SWITCH_MARGIN_PX, swit
 // Dwell on the targeter's element. Progress accumulates only while on target, and a slip
 // shorter than graceMs freezes it instead of resetting. After a selection the user must
 // look away (a different target, or none past the grace time) before it can fire again.
+// Team B re-renders the whole tile grid on most state changes, so the element we were
+// dwelling on (or just selected) is replaced by a fresh copy at the same place. Match a
+// new element to the old one by action + value + position instead of identity.
+const SAME_SPOT_PX = 30;
+const sigOf = (el) => {
+  if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+  const r = el.getBoundingClientRect();
+  return { a: el.dataset?.action || '', v: el.dataset?.value || '', x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+};
+const sameSpot = (sig, el) => {
+  const t = sig && sigOf(el);
+  return !!t && t.a === sig.a && t.v === sig.v && Math.hypot(t.x - sig.x, t.y - sig.y) < SAME_SPOT_PX;
+};
+
 export function createDwell({ graceMs = GRACE_MS, defaultMs = 1200 } = {}) {
   let el = null;
   let acc = 0;
   let lastOn = 0;
   let locked = null;
+  let lockedSig = null;
+  let elSig = null;
   let last = null;
 
   return {
@@ -59,6 +75,9 @@ export function createDwell({ graceMs = GRACE_MS, defaultMs = 1200 } = {}) {
     update(target, now, dwellMsOf) {
       const dt = last === null ? 0 : Math.min(now - last, 100);
       last = now;
+      // the grid was re-rendered: carry the lock / progress over to the replacement element
+      if (locked && target && target !== locked && !locked.isConnected && sameSpot(lockedSig, target)) locked = target;
+      if (el && target && target !== el && !el.isConnected && sameSpot(elSig, target)) el = target;
       if (locked && target !== locked) locked = null;
       if (target && target === locked) target = null;
       if (target && target === el) {
@@ -69,9 +88,10 @@ export function createDwell({ graceMs = GRACE_MS, defaultMs = 1200 } = {}) {
         el = target; acc = 0; lastOn = now;
       }
       if (!el) return { el: null, progress: 0, fired: null };
+      if (el === target) elSig = sigOf(el);
       const progress = Math.min(acc / (dwellMsOf(el) || defaultMs), 1);
       if (progress >= 1) {
-        const done = el; locked = done; el = null; acc = 0;
+        const done = el; locked = done; lockedSig = sigOf(done); el = null; acc = 0;
         return { el: null, progress: 0, fired: done };
       }
       return { el, progress, fired: null };
@@ -79,7 +99,7 @@ export function createDwell({ graceMs = GRACE_MS, defaultMs = 1200 } = {}) {
     // Blink: select the element being dwelled on right now.
     select() {
       const done = el;
-      if (done) { locked = done; el = null; acc = 0; }
+      if (done) { locked = done; lockedSig = sigOf(done); el = null; acc = 0; }
       return done;
     },
     get el() { return el; },
