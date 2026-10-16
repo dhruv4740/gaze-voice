@@ -40,3 +40,4 @@ video.gaze-head-preview { position: fixed; right: 8px; bottom: 8px; width: 160px
 .calib-cmp { margin-top: 8px; font-size: .95rem; opacity: .7; }
 .calib-dot.calib-auto { box-shadow: 0 0 0 0 rgba(255,255,255,.9); animation: calib-ring var(--ring-ms, 1800ms) linear; }
 @keyframes calib-ring { from { box-shadow: 0 0 0 26px rgba(255,255,255,.55); } to { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+#gaze-status:empty { display: none; }
