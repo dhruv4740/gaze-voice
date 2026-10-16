@@ -6,7 +6,7 @@ export const CATEGORIES = [
     label: 'Needs',
     labelHi: 'ज़रूरतें',
     tag: 'Physical',
-    icon: '💧',
+    icon: '',
     phrases: {
       'en-IN': [
         'Water with straw please',
@@ -31,7 +31,7 @@ export const CATEGORIES = [
     label: 'Feelings',
     labelHi: 'महसूस',
     tag: 'Emotion',
-    icon: '❤️',
+    icon: '',
     phrases: {
       'en-IN': [
         'I am comfortable',
@@ -56,7 +56,7 @@ export const CATEGORIES = [
     label: 'People',
     labelHi: 'लोग',
     tag: 'Contact',
-    icon: '👥',
+    icon: '',
     phrases: {
       'en-IN': [
         'Call Priya please',
@@ -81,7 +81,7 @@ export const CATEGORIES = [
     label: 'Pain',
     labelHi: 'दर्द',
     tag: 'Health',
-    icon: '🩺',
+    icon: '',
     phrases: {
       'en-IN': [
         'Severe headache',
@@ -106,14 +106,14 @@ export const CATEGORIES = [
     label: 'Quick Replies',
     labelHi: 'त्वरित',
     tag: 'Common',
-    icon: '⚡',
+    icon: '',
     phrases: {
       'en-IN': [
         'Yes, definitely',
         'No, thank you',
         'Thank you so much',
         'Wait a moment',
-        'I love you',
+        'I appreciate it',
         'Never mind'
       ],
       'hi-IN': [
@@ -121,7 +121,7 @@ export const CATEGORIES = [
         'नहीं, धन्यवाद',
         'बहुत बहुत धन्यवाद',
         'ज़रा रुकिए',
-        'मुझे तुमसे प्यार है',
+        'धन्यवाद',
         'कोई बात नहीं'
       ]
     }
@@ -139,7 +139,7 @@ export function getOfflineRoleReplies(utterance = '', lang = 'en-IN') {
       need: { role: 'need', tag: isHi ? 'ज़रूरत' : 'Need', text: isHi ? 'कृपया तकिया ठीक कीजिए' : 'Please adjust my pillow.' },
       feeling: { role: 'feeling', tag: isHi ? 'महसूस' : 'Feeling', text: isHi ? 'थोड़ी थकान है' : 'Feeling a little tired.' },
       ask_back: { role: 'ask_back', tag: isHi ? 'प्रश्न' : 'Ask Back', text: isHi ? 'आप कैसे हैं?' : 'How are you doing?' },
-      other: { role: 'other', tag: isHi ? 'कीबोर्ड' : 'Keyboard', text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else' }
+      other: { role: 'other', tag: isHi ? 'अन्य' : 'Other', text: isHi ? 'बहुत धन्यवाद' : 'Thank you so much.' }
     };
   }
 
@@ -150,7 +150,7 @@ export function getOfflineRoleReplies(utterance = '', lang = 'en-IN') {
       need: { role: 'need', tag: isHi ? 'ज़रूरत' : 'Need', text: isHi ? 'पानी स्ट्रॉ से दीजिए' : 'Water with straw please.' },
       feeling: { role: 'feeling', tag: isHi ? 'महसूस' : 'Feeling', text: isHi ? 'गले में सूखापन है' : 'My throat is dry.' },
       ask_back: { role: 'ask_back', tag: isHi ? 'प्रश्न' : 'Ask Back', text: isHi ? 'दवा का समय हुआ?' : 'Is it medicine time?' },
-      other: { role: 'other', tag: isHi ? 'कीबोर्ड' : 'Keyboard', text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else' }
+      other: { role: 'other', tag: isHi ? 'अन्य' : 'Other', text: isHi ? 'थोड़ा समय दीजिए' : 'I need a moment.' }
     };
   }
 
@@ -160,7 +160,7 @@ export function getOfflineRoleReplies(utterance = '', lang = 'en-IN') {
     need: { role: 'need', tag: isHi ? 'ज़रूरत' : 'Need', text: isHi ? 'मुझे पानी चाहिए' : 'I need some water.' },
     feeling: { role: 'feeling', tag: isHi ? 'महसूस' : 'Feeling', text: isHi ? 'मैं ठीक महसूस कर रहा हूँ' : 'I feel comfortable.' },
     ask_back: { role: 'ask_back', tag: isHi ? 'प्रश्न' : 'Ask Back', text: isHi ? 'क्या समय हुआ है?' : 'What time is it?' },
-    other: { role: 'other', tag: isHi ? 'कीबोर्ड' : 'Keyboard', text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else' }
+    other: { role: 'other', tag: isHi ? 'अन्य' : 'Other', text: isHi ? 'बहुत धन्यवाद' : 'Thank you so much.' }
   };
 }
 
