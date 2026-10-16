@@ -83,7 +83,9 @@ export function startConversation(app) {
   let isHighContrast = false;
   let isLargeText = false;
   let speechDebounceTimer = null;
-  let isAiRequestInFlight = false;
+  let aiSeq = 0; // newest question wins; older AI results are ignored
+  let offlineTimer = 0;
+  const AI_WAIT_MS = 2500;
   let lastGazeSelectTime = 0;
   let lastGazeTarget = null;
 
@@ -178,13 +180,23 @@ export function startConversation(app) {
     }
     isResting = false;
 
-    // Instant offline role replies
-    roleReplies = getOfflineRoleReplies(text, patientLang);
+    // Keep the current replies while the AI thinks (dimmed, not selectable); swap exactly once.
+    // Offline replies only if the AI throws or is late (2.5 s); a late AI result is then dropped.
+    const seq = ++aiSeq;
+    clearTimeout(offlineTimer);
     isLoadingReplies = true;
     updateChatBoardInPlace();
 
-    if (isAiRequestInFlight) return;
-    isAiRequestInFlight = true;
+    let settled = false;
+    const settle = (replies) => {
+      if (settled || seq !== aiSeq) return;
+      settled = true;
+      clearTimeout(offlineTimer);
+      if (replies && !isResting) roleReplies = replies;
+      isLoadingReplies = false;
+      updateChatBoardInPlace();
+    };
+    offlineTimer = setTimeout(() => settle(getOfflineRoleReplies(text, patientLang)), AI_WAIT_MS);
 
     try {
       const aiReplies = await predictReplies({
@@ -194,15 +206,10 @@ export function startConversation(app) {
         language: patientLang,
         tone: currentTone
       });
-      if (aiReplies && typeof aiReplies === 'object' && !isResting) {
-        roleReplies = aiReplies;
-      }
+      settle(aiReplies && typeof aiReplies === 'object' ? aiReplies : getOfflineRoleReplies(text, patientLang));
     } catch (err) {
-      console.warn('AI prediction failed, keeping instant replies:', err);
-    } finally {
-      isLoadingReplies = false;
-      isAiRequestInFlight = false;
-      updateChatBoardInPlace();
+      console.warn('AI prediction failed, using offline replies:', err);
+      settle(getOfflineRoleReplies(text, patientLang));
     }
   }
 
@@ -416,6 +423,7 @@ export function startConversation(app) {
       chatMounted = false;
       render();
     } else if (action === 'reply') {
+      if (isLoadingReplies && !pinnedReplies[target.dataset.role]) return; // still thinking: don't speak the old text
       handleSelectPhrase(value || target.querySelector('.conv-reply-text')?.textContent || target.textContent);
     } else if (action === 'toggle-pin') {
       const role = target.dataset.role;
@@ -748,6 +756,8 @@ export function startConversation(app) {
       phoneBadge.style.display = heardFrom === 'phone' ? 'inline-block' : 'none';
     }
 
+    // thinking state: dim, and take unpinned reply tiles out of the gaze target set (resets a dwell in progress)
+    hero.classList.toggle('is-thinking', isLoadingReplies);
     // 2. Update the 6 hero slot tiles in place
     const roles = ['agree', 'decline', 'need', 'feeling', 'ask_back', 'other'];
     for (const role of roles) {
@@ -760,6 +770,9 @@ export function startConversation(app) {
 
       const text = data.text;
       slotEl.classList.toggle('is-pinned', isPinned);
+      if (isLoadingReplies && !isPinned) {
+        if (slotEl.hasAttribute('data-gaze-target')) { slotEl.removeAttribute('data-gaze-target'); slotEl.removeAttribute('data-gaze-active'); }
+      } else if (!slotEl.hasAttribute('data-gaze-target')) slotEl.setAttribute('data-gaze-target', '');
       slotEl.dataset.value = text;
       slotEl.dataset.role = role;
 
@@ -994,13 +1007,13 @@ export function startConversation(app) {
         <!-- Main Screen Body: Hero (65% height, 6 tiles) + Bottom Row (6 tiles) -->
         <div class="conv-main-layout">
           <!-- Hero Grid (3x2, neutral surface, 30px semibold text, no labels, no icons) -->
-          <div class="conv-hero-grid">
+          <div class="conv-hero-grid ${isLoadingReplies ? 'is-thinking' : ''}">
             ${roles.map((role) => {
               const isPinned = !!pinnedReplies[role];
               const data = isPinned ? pinnedReplies[role] : roleReplies[role];
               const text = data?.text || '';
               return `
-                <div class="conv-reply-tile ${isPinned ? 'is-pinned' : ''}" id="slot-${role}" data-gaze-target data-action="reply" data-role="${role}" data-value="${escapeHtml(text)}">
+                <div class="conv-reply-tile ${isPinned ? 'is-pinned' : ''}" id="slot-${role}" ${isLoadingReplies && !isPinned ? '' : 'data-gaze-target'} data-action="reply" data-role="${role}" data-value="${escapeHtml(text)}">
                   <span class="conv-reply-text">${escapeHtml(text)}</span>
                   <button class="conv-pin-btn" data-action="toggle-pin" data-role="${role}" data-text="${escapeHtml(text)}" title="${isPinned ? 'Unpin' : 'Pin'}">
                     ${ICONS.pin}
