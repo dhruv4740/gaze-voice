@@ -15,7 +15,9 @@ The screen the patient sees, and the AI that predicts what they want to say.
    Final transcripts -> Heard strip + conversation history. Text box fallback.
 3. **Reply prediction.** On each new utterance call Groq
    `https://api.groq.com/openai/v1/chat/completions`, model `import.meta.env.VITE_GROQ_MODEL`,
-   key `import.meta.env.VITE_GROQ_API_KEY`, `response_format: {type: "json_object"}`.
+   key `import.meta.env.VITE_GROQ_API_KEY`, `response_format: {type: "json_object"}`,
+   `reasoning_effort: "low"` (gpt-oss is a reasoning model; low keeps replies fast).
+   Llama models are no longer on Groq's free tier; use `openai/gpt-oss-20b`.
    Send patient profile, last ~6 turns, time of day. Get 6 replies, each <= 8 words:
    yes / no / a need / a feeling / a question back / one surprise. Loading state; never
    block the UI.
