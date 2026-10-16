@@ -46,3 +46,7 @@ video.gaze-head-preview { position: fixed; right: 8px; bottom: 8px; width: 160px
 #caregiver-qr { position: absolute; bottom: 100%; left: 0; margin-bottom: 4px; background: #fff !important; color: #111 !important; border-radius: 10px !important; padding: 8px !important;
   font-size: 10px; max-width: 200px; word-break: break-all; cursor: default !important; }
 #caregiver-qr[hidden] { display: none; }
+
+/* Shift+H: clean projector view */
+body.gaze-clean #gaze-ui, body.gaze-clean #gaze-stats, body.gaze-clean video.gaze-head-preview,
+body.gaze-clean #webgazerVideoContainer, body.gaze-clean #gaze-raw { display: none !important; }

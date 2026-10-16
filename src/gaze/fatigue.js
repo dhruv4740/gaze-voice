@@ -29,7 +29,7 @@ export function evaluate({ baseline, rate, times }) {
 }
 
 export function createFatigue({ onChange } = {}) {
-  const t0 = performance.now();
+  let t0 = performance.now();
   const blinks = []; // timestamps (ms)
   const times = []; // time-to-select per selection (ms), capped
   let baseline = null;
@@ -68,6 +68,7 @@ export function createFatigue({ onChange } = {}) {
     // keep the first 5 as the 'start of session' baseline
     selected(ms) { times.push(ms); if (times.length > 200) times.splice(5, 1); },
     force(l) { snoozeUntil = 0; level = 'none'; set(l); },
+    reset() { t0 = performance.now(); blinks.length = 0; times.length = 0; baseline = null; closed = false; level = 'none'; },
     get level() { return level; },
     // longer dwell when tired (only for targets that use the default dwell)
     get dwellScale() { return level === 'high' ? 1.5 : level === 'mild' ? 1.25 : 1; },

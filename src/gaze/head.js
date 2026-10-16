@@ -2,9 +2,8 @@
 // map fitted on a 5-point calibration. Frames stay in the browser; the wasm runtime and
 // model file are only downloaded.
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { LOCAL, CDN, localAvailable } from './models.js';
 
-const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm';
-const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const NOSE_TIP = 1;
 const LOST_AFTER_MS = 800;
 const RECENT = 6;
@@ -66,13 +65,14 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
       throw new Error(denied ? 'Camera permission denied' : 'Camera unavailable');
     }
     try {
-      const fileset = await FilesetResolver.forVisionTasks(WASM);
-      landmarker = await FaceLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
+      const localOk = await localAvailable(LOCAL.task);
+      const make = async (src) => FaceLandmarker.createFromOptions(await FilesetResolver.forVisionTasks(src.wasm), {
+        baseOptions: { modelAssetPath: src.task, delegate: 'GPU' },
         runningMode: 'VIDEO',
         numFaces: 1,
         outputFaceBlendshapes: !!onBlink,
       });
+      try { landmarker = await make(localOk ? LOCAL : CDN); } catch (e) { if (!localOk) throw e; landmarker = await make(CDN); }
     } catch (err) {
       stream.getTracks().forEach((t) => t.stop());
       throw new Error('Could not load face model (offline?)');
@@ -146,6 +146,9 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     return true;
   }
 
+  // demo reset: forget live-learned samples, keep the calibration fit
+  function resetLearning() { learned = []; hist = []; sinceFit = 0; if (pairs.length) predict = makeModel(pairs) || predict; }
+
   async function reset() { pairs = []; learned = []; hist = []; predict = null; }
 
   function stop() {
@@ -156,7 +159,7 @@ export function createFaceTracker({ onPoint, onStatus, onBlink, features, makeMo
     landmarker?.close();
   }
 
-  return { start, stop, record, reset, fit, learn };
+  return { start, stop, record, reset, resetLearning, fit, learn };
 }
 
 // Head pointer: nose tip (mirrored so turning right moves right) -> screen by an affine map.
