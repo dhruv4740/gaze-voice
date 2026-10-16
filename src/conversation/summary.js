@@ -15,7 +15,12 @@ Date: ${new Date().toLocaleDateString()}
 Total Interactions Today: ${totalTurns}
 
 1. 🩺 Pain & Physical Comfort
-${painLogs.length > 0 ? painLogs.map((p) => `• [${p.timeStr}] Reported: "${p.reply}"`).join('\n') : '• No acute pain reported today. Patient appeared relatively comfortable.'}
+${painLogs.length > 0 ? painLogs.map((p) => {
+  if (p.zone && p.score) {
+    return `• [${p.timeStr}] ${p.zone} ${p.score}/10 at ${p.timeStr} (${p.level || 'acute'}) - "${p.reply}"`;
+  }
+  return `• [${p.timeStr}] Reported: "${p.reply}"`;
+}).join('\n') : '• No acute pain reported today. Patient appeared relatively comfortable.'}
 
 2. 😊 Mood & Communication Engagement
 • Active interaction throughout the day using eye-gaze communication.
@@ -32,7 +37,7 @@ ${requestLogs.length > 0 ? requestLogs.map((r) => `• [${r.timeStr}] Request: "
     return fallbackReport;
   }
 
-  const logSnippet = dailyLog.slice(-30).map((l) => `[${l.timeStr}] Heard: "${l.heard || '-'}" -> Spoken: "${l.reply || '-'}" (Type: ${l.kind || 'chat'})`).join('\n');
+  const logSnippet = dailyLog.slice(-30).map((l) => `[${l.timeStr}] Heard: "${l.heard || '-'}" -> Spoken: "${l.reply || '-'}" (Type: ${l.kind || 'chat'}${l.zone ? `, Zone: ${l.zone}, Score: ${l.score}/10` : ''})`).join('\n');
 
   const prompt = `You are an AAC clinical assistant creating a structured daily report for the doctor and family.
 Patient: ${memory.name} (${memory.condition})
@@ -41,7 +46,7 @@ Today's Event Log:
 ${logSnippet}
 
 Provide a structured, compassionate, and factual medical summary covering:
-1. 🩺 Pain & Physical Comfort (note exact times of pain mentions)
+1. 🩺 Pain & Physical Comfort (clearly list all pain events with zone, score, and exact time, e.g. "stomach 8/10 at 1:40 pm")
 2. 😊 Mood, Cognition & Responsiveness
 3. 🏠 Care Needs & Smart Requests Fulfilled
 4. 📋 Care Team Recommendations`;

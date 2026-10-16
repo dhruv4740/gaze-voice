@@ -13,7 +13,14 @@ function getTimeOfDay() {
   return 'night';
 }
 
-export async function predictReplies({ utterance, history = [], profile, language = 'en-IN' }) {
+const TONE_INSTRUCTIONS = {
+  gentle: 'Gentle, warm, and affectionate tone (kind, comforting, polite).',
+  urgent: 'Urgent, direct, and concise tone (pressing, critical, immediate).',
+  joking: 'Witty, lighthearted, and playful/joking tone with subtle humor.',
+  formal: 'Polite, dignified, and formal tone.'
+};
+
+export async function predictReplies({ utterance, history = [], profile, language = 'en-IN', tone = 'gentle' }) {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
   const model = import.meta.env.VITE_GROQ_MODEL || 'openai/gpt-oss-20b';
 
@@ -25,14 +32,16 @@ export async function predictReplies({ utterance, history = [], profile, languag
   const timeOfDay = getTimeOfDay();
   const isHi = language.startsWith('hi');
   const memorySnippet = getCompactMemoryPrompt();
+  const toneDesc = TONE_INSTRUCTIONS[tone?.toLowerCase()] || TONE_INSTRUCTIONS.gentle;
 
   const systemPrompt = `You are an AI assistant for a non-verbal patient using an eye-gaze communication device.
 ${memorySnippet}
 Time of day: ${timeOfDay}
 Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
+Patient Tone Style: ${toneDesc}
 
 Rules:
-1. Based on what was just heard, conversation history, and profile, output exactly 1 concise reply for each of these 5 semantic roles:
+1. Based on what was just heard, conversation history, and profile, output exactly 1 concise reply for each of these 5 semantic roles, phrased in the patient's Tone Style:
    - "agree": Affirmation, acceptance, or positive response
    - "decline": Polite refusal, declining, or negative response
    - "need": Practical, physical, or medical care need related to the question
@@ -88,7 +97,7 @@ Rules:
 
     if (!res.ok) {
       console.warn(`Groq API responded with status ${res.status}. Falling back to Gemini.`);
-      return await predictRepliesWithGemini({ utterance, history, profile, language });
+      return await predictRepliesWithGemini({ utterance, history, profile, language, tone });
     }
 
     const data = await res.json();
@@ -97,11 +106,11 @@ Rules:
     return formatRoleReplies(parsed, fallback, language);
   } catch (err) {
     console.warn('Groq prediction failed or exceeded 4s, falling back to Gemini:', err);
-    return await predictRepliesWithGemini({ utterance, history, profile, language });
+    return await predictRepliesWithGemini({ utterance, history, profile, language, tone });
   }
 }
 
-async function predictRepliesWithGemini({ utterance, history = [], profile, language = 'en-IN' }) {
+async function predictRepliesWithGemini({ utterance, history = [], profile, language = 'en-IN', tone = 'gentle' }) {
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const geminiModel = import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest';
   const fallback = getOfflineRoleReplies(utterance, language);
@@ -112,6 +121,7 @@ async function predictRepliesWithGemini({ utterance, history = [], profile, lang
 
   const isHi = language.startsWith('hi');
   const timeOfDay = getTimeOfDay();
+  const toneDesc = TONE_INSTRUCTIONS[tone?.toLowerCase()] || TONE_INSTRUCTIONS.gentle;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
 
   const prompt = `You are an AI assistant for a non-verbal patient using an eye-gaze communication device.
@@ -120,6 +130,7 @@ Key People: ${profile?.familyNames || 'Family and Doctor'}
 Usual Needs: ${profile?.usualNeeds || 'Water, reposition, medicine'}
 Time of day: ${timeOfDay}
 Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
+Patient Tone Style: ${toneDesc}
 Current heard speech: "${utterance || 'Hello, how are you?'}"
 Recent conversation context: ${history.slice(-4).map((t) => `${t.speaker}: ${t.text}`).join('; ')}
 
