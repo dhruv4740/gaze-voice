@@ -1,6 +1,6 @@
 // Team A (Opus + Sonnet) owns everything in src/gaze/.
-// Placeholder: mouse-driven pointer so Team B can build against the contract now.
-// Eye (WebGazer / MediaPipe) and head modes replace getPoint() below.
+// Modes: mouse (placeholder), eyes (WebGazer). Contract: docs/CONTRACT.md.
+import './gaze.css';
 
 const DEFAULT_DWELL_MS = 1200;
 
@@ -9,9 +9,36 @@ export function startGaze({ mode = 'mouse', root }) {
   cursor.id = 'gaze-cursor';
   root.appendChild(cursor);
 
+  const statusEl = document.createElement('div');
+  statusEl.id = 'gaze-status';
+  root.appendChild(statusEl);
+  const showStatus = (text, cls = '') => { statusEl.textContent = text; statusEl.className = cls; };
+
   let point = { x: -1, y: -1 };
-  if (mode !== 'mouse') console.warn(`gaze mode "${mode}" not built yet, using mouse`);
-  window.addEventListener('mousemove', (e) => { point = { x: e.clientX, y: e.clientY }; });
+  const setPoint = (x, y) => { point = { x, y }; };
+
+  window.addEventListener('mousemove', (e) => {
+    if (mode === 'mouse') setPoint(e.clientX, e.clientY);
+  });
+
+  if (mode === 'eyes') {
+    showStatus('starting camera…');
+    // dynamic import keeps the TensorFlow bundle out of mouse mode
+    import('./eyes.js').then(({ createEyesTracker }) => {
+      const tracker = createEyesTracker({
+        onPoint: setPoint,
+        onStatus: (s) => showStatus(s, s === 'tracking' ? 'ok' : 'bad'),
+      });
+      return tracker.start();
+    }).catch((err) => {
+      console.warn('eyes mode failed, falling back to mouse:', err);
+      mode = 'mouse';
+      showStatus(`${err.message}: using mouse`, 'bad');
+    });
+  } else if (mode !== 'mouse') {
+    console.warn(`gaze mode "${mode}" not built yet, using mouse`);
+    mode = 'mouse';
+  }
 
   let current = null;
   let dwellStart = 0;
