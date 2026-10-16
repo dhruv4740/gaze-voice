@@ -18,14 +18,14 @@ export function startConversation(app) {
   let isEmergency = false;
   let isListening = false;
   let isLoadingReplies = false;
-  let heardText = '';
+  let heardText = 'Did you sleep well?';
   let showManualInput = false;
 
   const history = [
-    { speaker: 'other', text: 'Hello, how are you feeling today?' }
+    { speaker: 'other', text: 'Did you sleep well?' }
   ];
 
-  let replies = getOfflineReplies('Hello, how are you feeling today?', language);
+  let replies = getOfflineReplies('Did you sleep well?', language);
 
   const spellEngine = new SpellEngine({
     onBufferChange: () => render(),
@@ -52,18 +52,24 @@ export function startConversation(app) {
   listener.start();
 
   async function handleNewUtterance(text) {
+    // 1. Instant feel: immediately display offline category/contextual replies
+    replies = getOfflineReplies(text, language);
     isLoadingReplies = true;
     render();
+
+    // 2. Fetch AI replies (Groq -> Gemini fallback) and swap in
     try {
-      replies = await predictReplies({
+      const aiReplies = await predictReplies({
         utterance: text,
         history,
         profile,
         language
       });
+      if (Array.isArray(aiReplies) && aiReplies.length > 0) {
+        replies = aiReplies;
+      }
     } catch (err) {
-      console.warn('Error predicting replies:', err);
-      replies = getOfflineReplies(text, language);
+      console.warn('AI prediction failed, keeping instant replies:', err);
     } finally {
       isLoadingReplies = false;
       render();
@@ -75,10 +81,11 @@ export function startConversation(app) {
     speakPhrase(phraseText, language);
     history.push({ speaker: 'patient', text: phraseText });
 
-    // After speaking, prompt Groq for likely follow-ups or reset heard context
     if (mode !== 'chat') {
       mode = 'chat';
     }
+    // Update replies contextually for patient's spoken turn
+    replies = getOfflineReplies(phraseText, language);
     render();
   }
 

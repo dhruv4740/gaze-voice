@@ -69,7 +69,7 @@ Rules:
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 s Groq timeout
 
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
@@ -91,8 +91,8 @@ Rules:
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      console.warn(`Groq API responded with status ${res.status}. Falling back to offline replies.`);
-      return getOfflineReplies(utterance, language);
+      console.warn(`Groq API responded with status ${res.status}. Falling back to Gemini.`);
+      return await predictRepliesWithGemini({ utterance, history, profile, language });
     }
 
     const data = await res.json();
@@ -112,11 +112,110 @@ Rules:
       });
     }
 
-    return getOfflineReplies(utterance, language);
+    return await predictRepliesWithGemini({ utterance, history, profile, language });
   } catch (err) {
-    console.warn('Groq prediction failed or timed out:', err);
+    console.warn('Groq prediction failed or exceeded 4s, falling back to Gemini:', err);
+    return await predictRepliesWithGemini({ utterance, history, profile, language });
+  }
+}
+
+async function predictRepliesWithGemini({ utterance, history = [], profile, language = 'en-IN' }) {
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const geminiModel = import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest';
+
+  if (!geminiKey || geminiKey.trim() === '') {
     return getOfflineReplies(utterance, language);
   }
+
+  const isHi = language.startsWith('hi');
+  const timeOfDay = getTimeOfDay();
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
+
+  const prompt = `You are an AI assistant for a non-verbal patient using an eye-gaze communication device.
+Patient: ${profile?.name || 'Aarav'} (${profile?.condition || 'Speech impaired'})
+Key People: ${profile?.familyNames || 'Family and Doctor'}
+Usual Needs: ${profile?.usualNeeds || 'Water, reposition, medicine'}
+Time of day: ${timeOfDay}
+Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
+Current heard speech: "${utterance || 'Hello, how are you?'}"
+Recent conversation context: ${history.slice(-4).map((t) => `${t.speaker}: ${t.text}`).join('; ')}
+
+Output a JSON object with a "replies" array of exactly 6 reply options for the patient, each strictly 8 words or fewer:
+1. "yes" (affirmation)
+2. "no" (polite refusal)
+3. "need" (physical or care need)
+4. "feeling" (emotion or state)
+5. "question" (counter-question)
+6. "surprise" (contextual remark)
+${isHi ? 'CRITICAL: Reply texts must be in Hindi Devanagari script.' : ''}
+
+JSON format:
+{
+  "replies": [
+    { "type": "yes", "tag": "Yes", "text": "..." },
+    { "type": "no", "tag": "No", "text": "..." },
+    { "type": "need", "tag": "Need", "text": "..." },
+    { "type": "feeling", "tag": "Feeling", "text": "..." },
+    { "type": "question", "tag": "Question", "text": "..." },
+    { "type": "surprise", "tag": "Note", "text": "..." }
+  ]
+}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': geminiKey.trim()
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.6,
+          maxOutputTokens: 300
+        }
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.warn(`Gemini fallback responded with ${res.status}. Using offline replies.`);
+      return getOfflineReplies(utterance, language);
+    }
+
+    const data = await res.json();
+    let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    rawText = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(rawText);
+
+    if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
+      return parsed.replies.slice(0, 6).map((r, i) => {
+        let text = (r.text || '').trim();
+        const words = text.split(/\s+/);
+        if (words.length > 8) text = words.slice(0, 8).join(' ');
+        return {
+          type: r.type || 'reply',
+          tag: r.tag || (['Yes', 'No', 'Need', 'Feeling', 'Question', 'Note'][i] || 'Reply'),
+          text
+        };
+      });
+    }
+  } catch (err) {
+    console.warn('Gemini fallback failed:', err);
+  }
+
+  return getOfflineReplies(utterance, language);
 }
 
 export async function predictWordCompletions(prefix, context = '') {
