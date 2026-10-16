@@ -13,7 +13,7 @@ export function dotPositions() {
 }
 
 // Resolves { meanError } once the user accepts the result.
-export function runCalibration({ root, tracker, getPoint }) {
+export function runCalibration({ root, tracker, getPoint, points = dotPositions(), clicksPerDot = CLICKS_PER_DOT }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.id = 'gaze-calib';
@@ -30,13 +30,12 @@ export function runCalibration({ root, tracker, getPoint }) {
     const place = (p) => { dot.style.left = `${p.fx * 100}%`; dot.style.top = `${p.fy * 100}%`; };
     const center = () => ({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
 
-    const points = dotPositions();
     let i = 0;
     let clicks = 0;
 
     function showDot() {
       place(points[i]);
-      dot.textContent = CLICKS_PER_DOT - clicks;
+      dot.textContent = clicksPerDot - clicks;
       msg.textContent = `Look at the dot and click it (${i + 1}/${points.length})`;
     }
 
@@ -44,12 +43,13 @@ export function runCalibration({ root, tracker, getPoint }) {
       const r = dot.getBoundingClientRect();
       tracker.record(r.left + r.width / 2, r.top + r.height / 2);
       dot.classList.remove('calib-pulse'); void dot.offsetWidth; dot.classList.add('calib-pulse');
-      if (++clicks < CLICKS_PER_DOT) { dot.textContent = CLICKS_PER_DOT - clicks; return; }
+      if (++clicks < clicksPerDot) { dot.textContent = clicksPerDot - clicks; return; }
       clicks = 0;
       if (++i < points.length) showDot(); else accuracyCheck();
     });
 
     function accuracyCheck() {
+      tracker.fit?.();
       dot.disabled = true;
       dot.textContent = '';
       place({ fx: 0.5, fy: 0.5 });
@@ -85,10 +85,16 @@ export function runCalibration({ root, tracker, getPoint }) {
       const done = document.createElement('button');
       done.textContent = 'Done';
       msg.append(h, v, again, done);
-      again.onclick = async () => { await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint })); };
+      again.onclick = async () => { await tracker.reset(); overlay.remove(); resolve(runCalibration({ root, tracker, getPoint, points, clicksPerDot })); };
       done.onclick = () => { overlay.remove(); resolve({ meanError }); };
     }
 
     showDot();
   });
 }
+
+// Centre first, then the four corners.
+export const HEAD_POINTS = [
+  { fx: 0.5, fy: 0.5 }, { fx: 0.1, fy: 0.12 }, { fx: 0.9, fy: 0.12 },
+  { fx: 0.9, fy: 0.88 }, { fx: 0.1, fy: 0.88 },
+];

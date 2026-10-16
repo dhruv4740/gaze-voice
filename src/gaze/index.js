@@ -30,11 +30,15 @@ export function startGaze({ mode = 'mouse', root }) {
     if (mode === 'mouse') setPoint(e.clientX, e.clientY);
   });
 
-  if (mode === 'eyes') {
+  if (mode === 'eyes' || mode === 'head') {
     showStatus('starting camera…');
-    // dynamic import keeps the TensorFlow bundle out of mouse mode
-    import('./eyes.js').then(({ createEyesTracker }) => {
-      const tracker = createEyesTracker({
+    // dynamic imports keep the TensorFlow / MediaPipe bundles out of mouse mode
+    const load = mode === 'eyes'
+      ? import('./eyes.js').then((m) => m.createEyesTracker)
+      : import('./head.js').then((m) => m.createHeadTracker);
+    const calibOpts = mode === 'head' ? { clicksPerDot: 3 } : {};
+    load.then((createTracker) => {
+      const tracker = createTracker({
         onPoint: setRaw,
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
@@ -49,15 +53,17 @@ export function startGaze({ mode = 'mouse', root }) {
         root.appendChild(recal);
         const calibrate = async () => {
           calibrating = true;
-          const { runCalibration } = await import('./calibration.js');
-          await runCalibration({ root, tracker, getPoint: () => point });
+          const { runCalibration, HEAD_POINTS } = await import('./calibration.js');
+          const opts = mode === 'head' ? { points: HEAD_POINTS, ...calibOpts } : calibOpts;
+          await runCalibration({ root, tracker, getPoint: () => point, ...opts });
           calibrating = false;
         };
         recal.onclick = async () => { if (calibrating) return; await tracker.reset(); calibrate(); };
         return calibrate();
       });
     }).catch((err) => {
-      console.warn('eyes mode failed, falling back to mouse:', err);
+      console.warn('camera mode failed, falling back to mouse:', err);
+      calibrating = false;
       mode = 'mouse';
       showStatus(`${err.message}: using mouse`, 'bad');
     });
