@@ -246,8 +246,8 @@ function formatRoleReplies(rawParsed, fallback, language) {
     },
     other: {
       role: 'other',
-      tag: isHi ? 'कीबोर्ड' : 'Keyboard',
-      text: isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else'
+      tag: isHi ? 'अन्य' : 'Other',
+      text: getVal('other') || (isHi ? 'बहुत धन्यवाद' : 'Thank you so much.')
     }
   };
 }

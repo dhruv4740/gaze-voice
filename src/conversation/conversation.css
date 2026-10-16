@@ -1,1082 +1,434 @@
 /* ==========================================================================
-   Team B: Conversation Interface Styles
-   High-contrast, eye-gaze optimized (>=200x150px targets, dwell rings)
+   Gaze Voice — Minimalist High-Focus AAC System
+   Visual Rules:
+   - One background (#0f1115), one surface (#181b21), one border (#2a2e36)
+   - One accent: teal (#14b8a6) for dwell and focus only
+   - Red (#ef4444) for Emergency only
+   - Muted Yes/No tints
+   - No gradients, glows or shadows
+   - One clean sans-serif font
+   - Never truncate text
    ========================================================================== */
 
 :root {
-  --conv-bg: #0b0e14;
-  --conv-card-bg: #151b26;
-  --conv-card-hover: #1c2434;
-  --conv-card-border: #263347;
-  --conv-accent: #00e5ff;
-  --conv-accent-glow: rgba(0, 229, 255, 0.35);
-  --conv-emergency: #ff1744;
-  --conv-emergency-glow: rgba(255, 23, 68, 0.45);
-  --conv-warning: #ffb300;
-  --conv-success: #00e676;
-  --conv-text-main: #f0f4fc;
-  --conv-text-muted: #8b9bb4;
-  --conv-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --conv-bg: #0f1115;
+  --conv-surface: #181b21;
+  --conv-border: #2a2e36;
+  --conv-text-main: #f1f5f9;
+  --conv-text-muted: #88909d;
+  --conv-accent: #14b8a6;
+  --conv-accent-dwell: rgba(20, 184, 166, 0.2);
+  --conv-emergency: #ef4444;
+  --conv-emergency-bg: rgba(239, 68, 68, 0.12);
+  --conv-yes-bg: rgba(34, 197, 94, 0.08);
+  --conv-yes-border: rgba(34, 197, 94, 0.3);
+  --conv-yes-text: #86efac;
+  --conv-no-bg: rgba(239, 68, 68, 0.08);
+  --conv-no-border: rgba(239, 68, 68, 0.25);
+  --conv-no-text: #fca5a5;
+  --conv-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  background-color: var(--conv-bg);
+  color: var(--conv-text-main);
+  font-family: var(--conv-font);
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  -webkit-font-smoothing: antialiased;
 }
 
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
   width: 100vw;
+  height: 100vh;
+  background-color: var(--conv-bg);
   overflow: hidden;
-  background: var(--conv-bg);
-  color: var(--conv-text-main);
   font-family: var(--conv-font);
-  user-select: none;
-}
-
-/* Accessibility: High-Contrast Mode */
-#app.contrast-high {
-  --conv-bg: #000000;
-  --conv-card-bg: #04060a;
-  --conv-card-hover: #0c121e;
-  --conv-card-border: #00e5ff;
-  --conv-text-main: #ffffff;
-  --conv-text-muted: #e2e8f0;
-}
-
-#app.contrast-high .conv-tile {
-  border: 3px solid #00e5ff;
-  background: #000000;
-  color: #ffffff;
-}
-
-#app.contrast-high .conv-tile-emergency {
-  border-color: #ff1744;
-}
-
-/* Accessibility: Large Text Scale (readable from 1.5m away) */
-#app.text-large .conv-tile {
-  font-size: 2.1rem;
-}
-
-#app.text-large .conv-heard-text {
-  font-size: 1.7rem;
-}
-
-#app.text-large .conv-tile-tag {
-  font-size: 1rem;
 }
 
 /* --------------------------------------------------------------------------
-   Judge Demo Mode & Live Speed Proof
-   -------------------------------------------------------------------------- */
-.conv-judge-guide {
-  background: #190f2b;
-  border: 2px solid #ce93d8;
-  color: #f3e5f5;
-  padding: 10px 24px;
-  margin: 12px 32px 0 32px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 1.15rem;
-  box-shadow: 0 4px 20px rgba(171, 71, 188, 0.25);
-}
-
-.conv-proof-banner {
-  background: #091322;
-  border: 2px solid var(--conv-accent);
-  color: #e1f5fe;
-  padding: 12px 24px;
-  margin: 10px 32px 0 32px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 1.05rem;
-  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.2);
-}
-
-.conv-proof-badge {
-  background: rgba(0, 229, 255, 0.2);
-  color: #00e5ff;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-/* --------------------------------------------------------------------------
-   Top Bar: Heard Strip + Status & Controls
+   Top Bar (~56px): Heard Question + Quiet Caregiver Menu
    -------------------------------------------------------------------------- */
 .conv-topbar {
+  height: 56px;
+  min-height: 56px;
+  max-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 6px 16px;
-  background: #111622;
-  border-bottom: 2px solid var(--conv-card-border);
-  min-height: 54px;
-  max-height: 58px;
+  padding: 0 20px;
+  background: var(--conv-bg);
+  border-bottom: 1px solid var(--conv-border);
+  gap: 16px;
   flex-shrink: 0;
-  box-sizing: border-box;
+  z-index: 10;
 }
 
-.conv-heard-container {
+.conv-heard-area {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  justify-content: center;
   flex: 1;
-  background: #0d121c;
-  padding: 6px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--conv-card-border);
-  min-height: 38px;
+  min-width: 0;
 }
 
-.conv-heard-label {
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--conv-accent);
+.conv-heard-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.conv-mic-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #556277;
-  display: inline-block;
-  transition: background 0.2s, box-shadow 0.2s;
-}
-
-.conv-mic-dot.active {
-  background: #00e676;
-  box-shadow: 0 0 10px #00e676;
-  animation: pulse-mic 1.5s infinite;
-}
-
-@keyframes pulse-mic {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.25); opacity: 0.75; }
+  gap: 12px;
 }
 
 .conv-heard-text {
-  font-size: 1.25rem;
-  font-weight: 500;
-  color: var(--conv-text-main);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
+  font-size: 24px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
+  line-height: 1.2;
 }
 
 .conv-heard-text.placeholder {
   color: var(--conv-text-muted);
-  font-style: italic;
+  font-weight: 400;
 }
 
-.conv-caregiver-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 3px 8px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-
-.conv-caregiver-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--conv-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0 4px;
-}
-
-.conv-btn-pill {
-  background: #1c2434;
-  border: 1px solid var(--conv-card-border);
-  color: var(--conv-text-main);
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.conv-btn-pill:hover {
-  background: #253147;
-  border-color: var(--conv-accent);
-}
-
-.conv-btn-pill.active {
-  background: rgba(0, 229, 255, 0.15);
-  border-color: var(--conv-accent);
-  color: var(--conv-accent);
-}
-
-.conv-caregiver-badge {
+.conv-phone-badge {
   display: inline-block;
-  background: rgba(0, 229, 255, 0.15);
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  font-size: 11px;
+  font-weight: 600;
   color: var(--conv-accent);
-  padding: 3px 10px;
-  border-radius: 10px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid rgba(20, 184, 166, 0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
-/* --------------------------------------------------------------------------
-   Main Interactive View
-   -------------------------------------------------------------------------- */
-.conv-main-view {
+.conv-demo-prompt {
+  font-size: 13px;
+  color: var(--conv-text-muted);
+  margin-top: 2px;
+}
+
+/* Quiet Caregiver Menu Button */
+.conv-menu-btn {
+  background: transparent;
+  border: 1px solid var(--conv-border);
+  color: var(--conv-text-muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
   display: flex;
-  flex: 1;
-  padding: 10px 16px;
-  gap: 16px;
-  height: auto;
-  min-height: 0;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-/* Left Sidebar: holds nav rail and fixed emergency container */
-.conv-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 250px;
-  height: 100%;
-  min-height: 0;
-  flex-shrink: 0;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-/* Side Navigation Rail */
-.conv-nav-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* Fixed Emergency Container in Sidebar - ALWAYS visible on screen */
-.conv-emergency-container {
-  flex-shrink: 0;
-  height: 130px;
-  width: 100%;
-  display: flex;
-}
-
-/* --------------------------------------------------------------------------
-   Stable Board: Core Zone, History/Pinned Row, and Fixed Role Slots
-   -------------------------------------------------------------------------- */
-.conv-board {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  gap: 10px;
-  overflow: hidden;
-}
-
-/* 1. Core Row (Fixed: Yes, No, Wait/Stop, Repeat Last) */
-.conv-core-zone {
-  display: flex;
-  gap: 10px;
-  height: 70px;
-  min-height: 70px;
-  flex-shrink: 0;
-}
-
-.conv-tile-core {
-  flex: 1;
-  min-height: 0 !important;
-  font-size: 1.35rem !important;
-  font-weight: 700 !important;
-  border-radius: 14px !important;
-  padding: 6px 12px !important;
-}
-
-.conv-tile-core.core-yes {
-  background: rgba(0, 230, 118, 0.12) !important;
-  border-color: #00e676 !important;
-  color: #b9f6ca !important;
-}
-
-.conv-tile-core.core-no {
-  background: rgba(255, 23, 68, 0.12) !important;
-  border-color: #ff1744 !important;
-  color: #ff8a80 !important;
-}
-
-.conv-tile-core.core-wait {
-  background: rgba(255, 152, 0, 0.12) !important;
-  border-color: #ff9800 !important;
-  color: #ffe082 !important;
-}
-
-.conv-tile-core.core-repeat {
-  background: rgba(0, 229, 255, 0.12) !important;
-  border-color: var(--conv-accent) !important;
-  color: #e0f7fa !important;
-}
-
-/* 2. Pinned & History Strip (Last 3 spoken) */
-.conv-aux-row {
-  display: flex;
-  gap: 8px;
-  height: 44px;
-  min-height: 44px;
-  flex-shrink: 0;
   align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
 }
 
-.conv-tile-pinned {
-  flex: 1.2;
-  height: 100%;
-  min-height: 0 !important;
-  font-size: 1.05rem !important;
-  font-weight: 600 !important;
-  background: rgba(255, 215, 0, 0.12) !important;
-  border-color: #ffd700 !important;
-  color: #fff9c4 !important;
-  border-radius: 12px !important;
-  padding: 4px 10px !important;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.conv-menu-btn:hover {
+  color: var(--conv-text-main);
+  border-color: #4b5563;
 }
 
-.conv-tile-history {
+/* --------------------------------------------------------------------------
+   Main Screen Container
+   -------------------------------------------------------------------------- */
+.conv-main-layout {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  height: 100%;
-  min-height: 0 !important;
-  font-size: 0.95rem !important;
-  font-weight: 500 !important;
-  background: #131824 !important;
-  border-color: #263347 !important;
-  border-radius: 12px !important;
-  padding: 4px 8px !important;
-  white-space: nowrap;
+  height: calc(100vh - 56px);
+  min-height: 0;
+  padding: 16px 20px;
+  gap: 16px;
+  background: var(--conv-bg);
   overflow: hidden;
-  text-overflow: ellipsis;
-  color: #c9d6df;
 }
 
-/* 3. Role-Based AI Grid (2x3 slots: Agree, Decline, Need, Feeling, Ask Back, Something Else) */
-.conv-role-grid {
+/* --------------------------------------------------------------------------
+   Hero Band: 6 Reply Tiles (3x2 Grid, ~65% of viewport height)
+   -------------------------------------------------------------------------- */
+.conv-hero-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
   flex: 1;
   min-height: 0;
 }
 
-.conv-tile-role {
+.conv-reply-tile {
   position: relative;
-  min-height: 150px;
-  min-width: 200px;
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 24px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s;
 }
 
-.conv-tile-role.is-pinned {
-  border-color: #ffd700 !important;
-  box-shadow: 0 0 16px rgba(255, 215, 0, 0.25) !important;
+.conv-reply-tile:hover,
+.conv-reply-tile[data-gaze-active] {
+  border-color: var(--conv-accent);
 }
 
+.conv-reply-tile.is-pinned {
+  border-color: #f59e0b;
+}
+
+.conv-reply-text {
+  font-size: 30px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.25;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* Small outline pin in corner shown ONLY on hover */
 .conv-pin-btn {
   position: absolute;
-  top: 8px;
+  top: 10px;
   right: 10px;
   background: transparent;
   border: none;
-  font-size: 1.1rem;
+  color: var(--conv-text-muted);
   cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
   z-index: 5;
 }
 
+.conv-reply-tile:hover .conv-pin-btn {
+  opacity: 1;
+}
+
 .conv-pin-btn:hover {
-  opacity: 1;
-  transform: scale(1.2);
+  color: var(--conv-accent);
 }
 
-.conv-tile-role.is-pinned .conv-pin-btn {
-  opacity: 1;
-  filter: drop-shadow(0 0 4px #ffd700);
-}
-
-/* Central 2x3 Grid of Big Tiles (>=200x150px with >=16px gap for cursor snap) */
-.conv-grid-container {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
+.conv-reply-tile.is-pinned .conv-pin-btn {
+  opacity: 0.8;
+  color: #f59e0b;
 }
 
 /* --------------------------------------------------------------------------
-   Gaze Tile Component (>=200x150px) & Dwell Filling Ring
+   Bottom Row: 6 Equal Tiles (Yes, No, Wait, Keyboard, More, Emergency)
    -------------------------------------------------------------------------- */
-.conv-tile {
-  position: relative;
+.conv-bottom-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  height: 96px;
+  min-height: 96px;
+  flex-shrink: 0;
+}
+
+.conv-action-tile {
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 12px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  padding: 14px;
-  min-width: 0;
-  min-height: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--conv-card-bg);
-  border: 2px solid var(--conv-card-border);
-  border-radius: 18px;
-  color: var(--conv-text-main);
-  font-family: inherit;
-  font-size: 1.5rem;
+  gap: 8px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 1.3;
+  color: var(--conv-text-main);
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  overflow: hidden;
-  box-sizing: border-box;
+  padding: 12px;
+  text-align: center;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
+  position: relative;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.conv-tile:hover {
-  background: var(--conv-card-hover);
-}
-
-.conv-tile.gaze-hover {
-  outline: none !important;
-  transform: scale(1.02);
-  border-color: transparent;
-}
-
-.conv-tile.is-active {
+.conv-action-tile:hover,
+.conv-action-tile[data-gaze-active] {
   border-color: var(--conv-accent);
-  background: rgba(0, 229, 255, 0.12);
-  box-shadow: 0 0 15px rgba(0, 229, 255, 0.2);
 }
 
-/* Circular / Rounded Dwell Progress Ring */
+.conv-action-tile.tile-yes {
+  background: var(--conv-yes-bg);
+  border-color: var(--conv-yes-border);
+  color: var(--conv-yes-text);
+}
+
+.conv-action-tile.tile-no {
+  background: var(--conv-no-bg);
+  border-color: var(--conv-no-border);
+  color: var(--conv-no-text);
+}
+
+.conv-action-tile.tile-emergency {
+  background: var(--conv-emergency-bg);
+  border: 1.5px solid var(--conv-emergency);
+  color: var(--conv-emergency);
+  font-weight: 700;
+}
+
+.conv-action-tile.tile-emergency:hover,
+.conv-action-tile.tile-emergency[data-gaze-active] {
+  border-color: #ff2222;
+  background: rgba(239, 68, 68, 0.22);
+}
+
+/* Dwell Filling Ring for all gaze targets */
 .conv-tile-dwell-ring {
   position: absolute;
   inset: 0;
-  border-radius: 18px;
-  padding: 6px;
-  background: conic-gradient(
-    var(--conv-accent) calc(var(--dwell, 0) * 360deg),
-    rgba(255, 255, 255, 0.06) calc(var(--dwell, 0) * 360deg)
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+  border-radius: inherit;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.1s ease;
-  box-shadow: 0 0 15px var(--conv-accent-glow);
-}
-
-.conv-tile.gaze-hover .conv-tile-dwell-ring {
-  opacity: 1;
-}
-
-/* Category Badges & Subtext */
-.conv-tile-tag {
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--conv-accent);
-  margin-bottom: 6px;
-  opacity: 0.85;
-}
-
-.conv-tile-text {
-  word-break: break-word;
+  border: 2px solid transparent;
 }
 
 /* --------------------------------------------------------------------------
-   Emergency Tile (Corner, 2000ms dwell)
+   Full-Screen Panels ("More", "Pain", "Keyboard", etc.)
    -------------------------------------------------------------------------- */
-.conv-tile-emergency {
-  background: #2b0b12;
-  border-color: #66101f;
-  color: #ffccd5;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  margin: 0;
-}
-
-.conv-tile-emergency .conv-tile-tag {
-  color: var(--conv-emergency);
-}
-
-.conv-tile-emergency.gaze-hover .conv-tile-dwell-ring {
-  background: conic-gradient(
-    var(--conv-emergency) calc(var(--dwell, 0) * 360deg),
-    rgba(255, 255, 255, 0.06) calc(var(--dwell, 0) * 360deg)
-  );
-  box-shadow: 0 0 20px var(--conv-emergency-glow);
-}
-
-/* --------------------------------------------------------------------------
-   Nav / Utility Tiles
-   -------------------------------------------------------------------------- */
-.conv-tile-nav {
-  flex: 1;
-  min-height: 0;
-  min-width: 200px;
-  font-size: 1.25rem;
-  background: #121824;
-  padding: 8px 12px;
-}
-
-.conv-tile-back {
-  background: #171d2b;
-}
-
-/* --------------------------------------------------------------------------
-   Full Screen Emergency Alarm Modal
-   -------------------------------------------------------------------------- */
-.conv-emergency-modal {
-  position: fixed;
-  inset: 0;
-  background: #1a0006;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
-  padding: 40px;
-  animation: flash-alarm 1s infinite alternate ease-in-out;
-}
-
-@keyframes flash-alarm {
-  0% { background: #26000a; }
-  100% { background: #500014; }
-}
-
-.conv-emergency-banner {
-  font-size: 3.5rem;
-  font-weight: 900;
-  color: #fff;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  text-shadow: 0 0 30px rgba(255, 23, 68, 0.9);
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.conv-emergency-sub {
-  font-size: 1.8rem;
-  color: #ffccd5;
-  text-align: center;
-  max-width: 800px;
-}
-
-.conv-emergency-dismiss {
-  width: 320px;
-  height: 160px;
-  font-size: 1.6rem;
-  background: #263347;
-  border: 3px solid #4fc3f7;
-  color: #fff;
-}
-
-/* --------------------------------------------------------------------------
-   Spell Mode Styles
-   -------------------------------------------------------------------------- */
-.conv-spell-container {
+.conv-panel-view {
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 12px;
-  height: 100%;
+  height: calc(100vh - 56px);
   min-height: 0;
+  padding: 20px;
+  gap: 16px;
+  background: var(--conv-bg);
   overflow: hidden;
 }
 
-.conv-spell-bar {
+.conv-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #111622;
-  border: 2px solid var(--conv-card-border);
-  border-radius: 14px;
-  padding: 8px 16px;
-  min-height: 52px;
+  height: 48px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--conv-border);
+  padding-bottom: 8px;
 }
 
-.conv-spell-buffer {
-  font-size: 1.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--conv-accent);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.conv-panel-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #ffffff;
 }
 
-.conv-spell-cursor {
-  display: inline-block;
-  width: 3px;
-  height: 24px;
-  background: var(--conv-accent);
-  animation: blink 1s infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-.conv-predictions-row {
-  display: flex;
-  gap: 12px;
-  height: 64px;
-  min-height: 64px;
-  flex-shrink: 0;
-}
-
-.conv-prediction-tile {
+.conv-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 16px;
   flex: 1;
-  min-height: 0 !important;
-  font-size: 1.2rem !important;
-  background: #1b263b !important;
-  border-color: #415a77 !important;
+  min-height: 0;
 }
 
-/* --------------------------------------------------------------------------
-   History Drawer & Profile Modal
-   -------------------------------------------------------------------------- */
-.conv-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(4px);
-  z-index: 5000;
+.conv-panel-tile {
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 12px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-}
-
-.conv-modal-card {
-  background: #151b26;
-  border: 2px solid var(--conv-card-border);
-  border-radius: 20px;
-  padding: 24px;
-  width: 100%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-}
-
-.conv-form-group {
-  margin-bottom: 16px;
-}
-
-.conv-form-group label {
-  display: block;
-  font-size: 0.9rem;
+  text-align: center;
+  gap: 8px;
+  padding: 16px;
+  cursor: pointer;
+  font-size: 20px;
   font-weight: 600;
-  color: var(--conv-accent);
-  margin-bottom: 6px;
-  text-transform: uppercase;
+  color: var(--conv-text-main);
+  position: relative;
+  transition: border-color 0.15s;
 }
 
-.conv-form-group input,
-.conv-form-group textarea {
-  width: 100%;
-  background: #0d121c;
-  border: 1px solid var(--conv-card-border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  color: #fff;
-  font-size: 1rem;
-  font-family: inherit;
-}
-
-.conv-form-group input:focus,
-.conv-form-group textarea:focus {
-  outline: none;
+.conv-panel-tile:hover,
+.conv-panel-tile[data-gaze-active] {
   border-color: var(--conv-accent);
 }
 
-.conv-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
+.conv-panel-tile .panel-tile-sub {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--conv-text-muted);
 }
 
-.conv-loading-pill {
-  font-size: 0.85rem;
+.conv-panel-tile.is-active {
+  border-color: var(--conv-accent);
+  background: rgba(20, 184, 166, 0.08);
   color: var(--conv-accent);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  opacity: 0.85;
 }
 
 /* --------------------------------------------------------------------------
-   Fatigue Alert Tile (Listening to 'gaze:fatigue')
+   Pain Map Panel
    -------------------------------------------------------------------------- */
-.conv-fatigue-banner {
-  background: #332005;
-  border: 2px solid var(--conv-warning);
-  color: #ffe082;
-  padding: 12px 24px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  animation: pulse-fatigue 2s infinite ease-in-out;
-}
-
-@keyframes pulse-fatigue {
-  0%, 100% { box-shadow: 0 0 10px rgba(255, 179, 0, 0.2); }
-  50% { box-shadow: 0 0 25px rgba(255, 179, 0, 0.45); }
-}
-
-.conv-tile-fatigue {
-  background: #332005;
-  border-color: var(--conv-warning);
-  color: #ffe082;
-}
-
-.conv-tile-fatigue .conv-tile-tag {
-  color: var(--conv-warning);
-}
-
-/* --------------------------------------------------------------------------
-   Live Translation Dual Subtitles
-   -------------------------------------------------------------------------- */
-.conv-translation-box {
-  background: #0a111a;
-  border-top: 1px solid var(--conv-card-border);
-  padding: 8px 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 1.1rem;
-}
-
-.conv-trans-label {
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--conv-accent);
-  letter-spacing: 0.05em;
-}
-
-.conv-trans-text {
-  color: #81d4fa;
-  font-weight: 500;
-}
-
-/* --------------------------------------------------------------------------
-   Daily Summary Report Modal
-   -------------------------------------------------------------------------- */
-.conv-summary-card {
-  max-width: 750px;
-}
-
-.conv-summary-text {
-  white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.95rem;
-  line-height: 1.6;
-  background: #0b0f17;
-  padding: 18px;
-  border-radius: 12px;
-  border: 1px solid var(--conv-card-border);
-  color: #d1d9e6;
-  max-height: 55vh;
-  overflow-y: auto;
-}
-
-/* --------------------------------------------------------------------------
-   Full QWERTY Keyboard Styles
-   -------------------------------------------------------------------------- */
-.conv-keyboard-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  gap: 10px;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.conv-type-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #111622;
-  border: 2px solid var(--conv-card-border);
-  border-radius: 12px;
-  padding: 6px 14px;
-  min-height: 44px;
-  flex-shrink: 0;
-}
-
-.conv-type-buffer {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--conv-accent);
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-}
-
-.conv-type-predictions {
-  display: flex;
-  gap: 10px;
-  height: 52px;
-  min-height: 52px;
-  flex-shrink: 0;
-}
-
-.conv-pred-tile {
-  flex: 1;
-  min-height: 0 !important;
-  font-size: 1.15rem !important;
-  background: #131c2b !important;
-  border-color: #2b3d5c !important;
-  padding: 4px 8px !important;
-  border-radius: 12px !important;
-}
-
-.conv-qwerty-grid {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  gap: 8px;
-}
-
-.conv-qwerty-row {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  gap: 8px;
-}
-
-.conv-key-tile {
-  flex: 1;
-  min-height: 0 !important;
-  padding: 0 !important;
-  font-size: 1.55rem !important;
-  font-weight: 700 !important;
-  border-radius: 12px !important;
-  background: #151b26;
-  border: 2px solid var(--conv-card-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.conv-key-tile.key-wide-15 {
-  flex: 1.5;
-  font-size: 1.05rem !important;
-}
-
-.conv-key-tile.key-wide-2 {
-  flex: 2;
-  font-size: 1.1rem !important;
-}
-
-.conv-key-tile.key-wide-3 {
-  flex: 3;
-  font-size: 1.25rem !important;
-}
-
-.conv-key-tile.key-wide-4 {
-  flex: 4;
-  font-size: 1.3rem !important;
-}
-
-.conv-key-tile.key-action-speak {
-  background: rgba(0, 229, 255, 0.18) !important;
-  border-color: var(--conv-accent) !important;
-  color: #fff !important;
-}
-
-.conv-key-tile.key-action-clear {
-  background: rgba(255, 23, 68, 0.12) !important;
-  border-color: #66101f !important;
-}
-
-/* --------------------------------------------------------------------------
-   Remote Question Phone Badge
-   -------------------------------------------------------------------------- */
-.conv-phone-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(0, 230, 118, 0.15);
-  border: 1px solid rgba(0, 230, 118, 0.4);
-  color: #00e676;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: 4px;
-}
-
-/* --------------------------------------------------------------------------
-   Tone Tiles Row
-   -------------------------------------------------------------------------- */
-.conv-tone-row {
-  display: flex;
-  gap: 8px;
-  height: 42px;
-  min-height: 42px;
-  flex-shrink: 0;
-}
-
-.conv-tile-tone {
-  flex: 1;
-  height: 100%;
-  min-height: 0 !important;
-  font-size: 1.05rem !important;
-  font-weight: 600 !important;
-  border-radius: 12px !important;
-  padding: 4px 10px !important;
-  background: #121824 !important;
-  border: 1px solid var(--conv-card-border) !important;
-  color: var(--conv-text-muted) !important;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.conv-tile-tone.is-active {
-  background: rgba(0, 229, 255, 0.15) !important;
-  border-color: var(--conv-accent) !important;
-  color: var(--conv-accent) !important;
-  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
-}
-
-/* --------------------------------------------------------------------------
-   Pain & Body Map (8 Zones + Pain Scale)
-   -------------------------------------------------------------------------- */
-.conv-pain-board {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.conv-pain-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: rgba(255, 82, 82, 0.12);
-  border: 1px solid rgba(255, 82, 82, 0.35);
-  border-radius: 12px;
-  padding: 8px 16px;
-  color: #ff8a80;
-  font-size: 1.15rem;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.conv-pain-grid {
+.conv-pain-grid-4x2 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
   flex: 1;
   min-height: 0;
 }
 
 .conv-pain-tile {
-  background: #141a29;
-  border: 2px solid #263347;
-  border-radius: 16px;
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 150px;
-  min-width: 200px;
-  transition: all 0.15s ease;
+  padding: 16px;
   cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s;
 }
 
-.conv-pain-tile:hover {
-  border-color: #ff5252;
-  background: rgba(255, 82, 82, 0.12);
-  transform: translateY(-2px);
+.conv-pain-tile:hover,
+.conv-pain-tile[data-gaze-active] {
+  border-color: var(--conv-accent);
 }
 
-.conv-pain-tile .conv-pain-icon {
-  font-size: 2.2rem;
+.conv-pain-name {
+  font-size: 22px;
+  font-weight: 600;
+  color: #ffffff;
 }
 
-.conv-pain-tile .conv-pain-label {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #fff;
-}
-
-.conv-pain-tile .conv-pain-sub {
-  font-size: 0.85rem;
+.conv-pain-desc {
+  font-size: 13px;
   color: var(--conv-text-muted);
 }
 
-/* Pain Scale Grid (3 Big Tiles: Mild, Moderate, Severe) */
-.conv-pain-scale-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  gap: 12px;
-}
-
-.conv-pain-scale-grid {
+/* Pain Scale (3 Big Tiles) */
+.conv-pain-scale-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
@@ -1084,79 +436,338 @@
   min-height: 0;
 }
 
-.conv-pain-scale-tile {
-  border-radius: 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 180px;
-  min-width: 200px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.conv-pain-scale-tile.scale-mild {
-  background: rgba(0, 230, 118, 0.1);
-  border: 2px solid #00e676;
-  color: #b9f6ca;
-}
-
-.conv-pain-scale-tile.scale-moderate {
-  background: rgba(255, 193, 7, 0.1);
-  border: 2px solid #ffc107;
-  color: #ffe082;
-}
-
-.conv-pain-scale-tile.scale-severe {
-  background: rgba(255, 23, 68, 0.15);
-  border: 2px solid #ff1744;
-  color: #ff8a80;
-}
-
-.conv-pain-scale-tile .conv-scale-score {
-  font-size: 2.8rem;
-  font-weight: 800;
-}
-
-.conv-pain-scale-tile .conv-scale-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-}
-
-.conv-pain-scale-tile .conv-scale-sub {
-  font-size: 1rem;
-  opacity: 0.85;
-}
-
-/* Exact Number Grid (0-10) */
-.conv-pain-exact-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-}
-
-.conv-pain-exact-tile {
-  font-size: 2rem;
-  font-weight: 800;
+.conv-scale-tile {
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
   border-radius: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 10px;
+  padding: 24px;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s;
 }
 
-.conv-pain-exact-tile .exact-sub {
-  font-size: 0.8rem;
+.conv-scale-tile:hover,
+.conv-scale-tile[data-gaze-active] {
+  border-color: var(--conv-accent);
+}
+
+.conv-scale-tile.scale-mild {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.conv-scale-tile.scale-moderate {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.conv-scale-tile.scale-severe {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: var(--conv-emergency-bg);
+}
+
+.conv-scale-score {
+  font-size: 48px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.conv-scale-name {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.conv-scale-info {
+  font-size: 14px;
+  color: var(--conv-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   QWERTY Keyboard View
+   -------------------------------------------------------------------------- */
+.conv-keyboard-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: calc(100vh - 56px);
+  min-height: 0;
+  padding: 16px 20px;
+  gap: 12px;
+  background: var(--conv-bg);
+  overflow: hidden;
+}
+
+.conv-type-strip {
+  display: flex;
+  align-items: center;
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 10px;
+  padding: 12px 18px;
+  min-height: 54px;
+  flex-shrink: 0;
+}
+
+.conv-type-buffer {
+  font-size: 26px;
   font-weight: 500;
-  opacity: 0.75;
+  color: #ffffff;
+  flex: 1;
 }
 
+.conv-type-preds {
+  display: flex;
+  gap: 10px;
+  height: 48px;
+  min-height: 48px;
+  flex-shrink: 0;
+}
 
+.conv-pred-btn {
+  flex: 1;
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 8px;
+  color: var(--conv-text-main);
+  font-size: 18px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s;
+}
 
+.conv-pred-btn:hover,
+.conv-pred-btn[data-gaze-active] {
+  border-color: var(--conv-accent);
+}
+
+.conv-qwerty-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.conv-qwerty-row {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.conv-key-tile {
+  flex: 1;
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s;
+}
+
+.conv-key-tile:hover,
+.conv-key-tile[data-gaze-active] {
+  border-color: var(--conv-accent);
+}
+
+.conv-key-tile.key-wide-2 { flex: 2; font-size: 16px; }
+.conv-key-tile.key-wide-3 { flex: 3; font-size: 18px; }
+.conv-key-tile.key-wide-4 { flex: 4; font-size: 18px; }
+.conv-key-tile.key-action-speak {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: var(--conv-accent);
+  color: var(--conv-accent);
+}
+
+/* --------------------------------------------------------------------------
+   Modals: Caregiver Settings, Summary, Profile, Onboarding, Emergency
+   -------------------------------------------------------------------------- */
+.conv-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.conv-modal-card {
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.conv-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--conv-border);
+  padding-bottom: 12px;
+}
+
+.conv-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.conv-modal-close {
+  background: transparent;
+  border: 1px solid var(--conv-border);
+  color: var(--conv-text-muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.conv-modal-close:hover {
+  color: #ffffff;
+}
+
+.conv-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(42, 46, 54, 0.5);
+}
+
+.conv-setting-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--conv-text-main);
+}
+
+.conv-setting-desc {
+  font-size: 13px;
+  color: var(--conv-text-muted);
+  margin-top: 2px;
+}
+
+.conv-btn {
+  background: var(--conv-surface);
+  border: 1px solid var(--conv-border);
+  color: var(--conv-text-main);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.conv-btn:hover {
+  border-color: var(--conv-accent);
+}
+
+.conv-btn.btn-active {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: var(--conv-accent);
+  color: var(--conv-accent);
+}
+
+.conv-btn.btn-primary {
+  background: var(--conv-accent);
+  color: #0f1115;
+  border-color: var(--conv-accent);
+  font-weight: 600;
+}
+
+.conv-input {
+  background: var(--conv-bg);
+  border: 1px solid var(--conv-border);
+  border-radius: 8px;
+  color: #ffffff;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  width: 100%;
+}
+
+.conv-input:focus {
+  outline: none;
+  border-color: var(--conv-accent);
+}
+
+/* Emergency Full Screen Alert */
+.conv-emergency-modal {
+  position: fixed;
+  inset: 0;
+  background: #180507;
+  border: 4px solid var(--conv-emergency);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  gap: 24px;
+  padding: 40px;
+  text-align: center;
+}
+
+.conv-emergency-title {
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--conv-emergency);
+  letter-spacing: 0.05em;
+}
+
+.conv-emergency-details {
+  font-size: 18px;
+  color: #ffffff;
+  line-height: 1.6;
+  max-width: 600px;
+}
+
+.conv-emergency-dismiss {
+  background: var(--conv-emergency);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 20px 48px;
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  position: relative;
+}
+
+/* Accessibility Modes */
+.contrast-high {
+  --conv-bg: #000000;
+  --conv-surface: #101010;
+  --conv-border: #ffffff;
+  --conv-text-main: #ffffff;
+  --conv-text-muted: #cccccc;
+}
+
+.text-large .conv-reply-text {
+  font-size: 36px;
+}
+
+.text-large .conv-action-tile {
+  font-size: 24px;
+}

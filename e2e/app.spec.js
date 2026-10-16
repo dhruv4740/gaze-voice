@@ -34,12 +34,7 @@ async function hover(page, sel) {
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 6 });
 }
 async function openAsk(page) {
-  // workaround: Team B's caregiver pills lack data-gaze-target so their click handler ignores them (see 5b)
-  await page.evaluate(() => document.querySelector('[data-action="toggle-input"]').setAttribute('data-gaze-target', ''));
-  await page.click('[data-action="toggle-input"]');
-  // second Team B gap (see 5c): in chat mode the board updates in place, so the box only appears after a full re-render
-  await page.click('[data-action="nav-type"]');
-  await page.click('[data-action="nav-back"]');
+  await page.click('[data-action="open-caregiver-menu"]');
   await page.waitForSelector('#manual-utterance');
 }
 async function ask(page, text) {
@@ -49,7 +44,7 @@ async function ask(page, text) {
 }
 const rects = (page, sels) => page.evaluate((s) => Object.fromEntries(s.map((q) => { const r = document.querySelector(q).getBoundingClientRect(); return [q, [r.x, r.y, r.width, r.height].map(Math.round)]; })), sels);
 const SLOTS = ['#slot-agree', '#slot-decline', '#slot-need', '#slot-feeling', '#slot-ask_back', '#slot-other'];
-const CORE = ['.core-yes', '.core-no', '.core-wait', '.core-repeat', '.conv-tile-emergency'];
+const CORE = ['[data-action="core-yes"]', '[data-action="core-no"]', '[data-action="core-wait"]', '[data-action="open-more"]', '.conv-tile-emergency'];
 
 test.describe('1. no console errors', () => {
   for (const url of ['/?mode=mouse', '/landing.html', '/caregiver.html']) {
@@ -106,8 +101,8 @@ for (const vp of [{ width: 1366, height: 768 }, { width: 1024, height: 768 }]) {
 test('3. dwell selects once; staying gives no immediate repeat', async ({ page }) => {
   await prep(page);
   await page.goto('/?mode=mouse');
-  await page.waitForSelector('.core-wait');
-  await hover(page, '.core-wait');
+  await page.waitForSelector('[data-action="core-wait"]');
+  await hover(page, '[data-action="core-wait"]');
   await expect.poll(() => ev(page, 'select'), { timeout: 5000 }).toBe(1);
   await page.waitForTimeout(1000); // refractory is 1.5 s and a new dwell needs 1.2 s: no second one yet
   expect(await ev(page, 'select')).toBe(1);
@@ -132,12 +127,12 @@ test('5. a question fills the role slots without moving anything', async ({ page
   await openAsk(page); // the open text box shifts the layout by itself, so measure with it open
   const before = await rects(page, [...SLOTS, ...CORE]);
   await ask(page, 'Are you in pain right now?');
-  await expect(page.locator('#slot-agree .conv-tile-text')).toHaveText(/Yes \d agree/);
-  const first = await page.locator('#slot-agree .conv-tile-text').innerText();
-  await expect(page.locator('#slot-need .conv-tile-text')).toHaveText(/water/);
+  await expect(page.locator('#slot-agree .conv-reply-text')).toHaveText(/Yes \d agree/);
+  const first = await page.locator('#slot-agree .conv-reply-text').innerText();
+  await expect(page.locator('#slot-need .conv-reply-text')).toHaveText(/water/);
   expect(await rects(page, [...SLOTS, ...CORE])).toEqual(before);
   await ask(page, 'Do you want some tea now?');
-  await expect(page.locator('#slot-agree .conv-tile-text')).not.toHaveText(first);
+  await expect(page.locator('#slot-agree .conv-reply-text')).not.toHaveText(first);
   expect(await rects(page, [...SLOTS, ...CORE])).toEqual(before);
 });
 
@@ -198,7 +193,7 @@ test.fixme('7b. Heard strip shows a phone question with a "from phone" badge and
   await phone.click('#chips button:has-text("Are you hungry?")');
   await expect(patient.locator('.conv-heard-text')).toContainText('Are you hungry?');
   await expect(patient.locator('.conv-heard-container')).toContainText(/from phone/i);
-  await expect(patient.locator('#slot-agree .conv-tile-text')).toHaveText(/Yes \d agree/);
+  await expect(patient.locator('#slot-agree .conv-reply-text')).toHaveText(/Yes \d agree/);
 });
 
 test('8. picker on first load, remembered after reload', async ({ page }) => {
@@ -220,10 +215,10 @@ test('8. picker on first load, remembered after reload', async ({ page }) => {
 test('9. Shift+P pause blocks selection; emergency still works', async ({ page }) => {
   await prep(page);
   await page.goto('/?mode=mouse');
-  await page.waitForSelector('.core-wait');
+  await page.waitForSelector('[data-action="core-wait"]');
   await page.keyboard.press('Shift+P');
   await expect(page.locator('#gaze-rest-btn')).toHaveText('Wake');
-  await hover(page, '.core-wait');
+  await hover(page, '[data-action="core-wait"]');
   await page.waitForTimeout(3000);
   expect(await ev(page, 'select')).toBe(0);
   await hover(page, '.conv-tile-emergency');
@@ -235,11 +230,11 @@ test('10. X-ray mode toggles with Shift+X, draws, and throws nothing', async ({ 
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   await page.goto('/?mode=mouse');
-  await page.waitForSelector('.core-wait');
+  await page.waitForSelector('[data-action="core-wait"]');
   await expect(page.locator('#gaze-xray')).toBeHidden();
   await page.keyboard.press('Shift+X');
   await expect(page.locator('#gaze-xray')).toBeVisible();
-  await hover(page, '.core-wait');
+  await hover(page, '[data-action="core-wait"]');
   await page.waitForTimeout(700);
   // something was drawn (panel background is the first pixel block)
   const drawn = await page.evaluate(() => { const c = document.getElementById('gaze-xray'); return c.getContext('2d').getImageData(20, 20, 1, 1).data[3]; });
@@ -263,15 +258,15 @@ test('10b. X-ray with a (fake) camera in head+hand mode', async ({ page }) => {
   expect(errs).toEqual([]);
 });
 
-test('11. Stop tile turns into Listen and back', async ({ page }) => {
+test('11. Stop Listening tile toggles the mic label', async ({ page }) => {
   await prep(page);
   await page.goto('/?mode=mouse');
   await page.waitForSelector('#slot-agree');
-  await page.evaluate(() => document.querySelector('[data-action="audio-stop"]').click());
-  await expect(page.locator('[data-action="audio-listen"]')).toHaveCount(1);
-  await expect(page.locator('[data-action="audio-stop"]')).toHaveCount(0);
-  await page.evaluate(() => document.querySelector('[data-action="audio-listen"]').click());
-  await expect(page.locator('[data-action="audio-stop"]')).toHaveCount(1);
+  await page.click('[data-action="open-more"]');
+  const t = page.locator('[data-action="toggle-audio"]');
+  await expect(t).toContainText('Stop Listening');
+  await t.click();
+  await expect(page.locator('[data-action="toggle-audio"]')).toContainText('Start Listening');
 });
 
 test('12. ?dark=1: lum exposed, banner auto-accepts, border shows, Shift+N toggles', async ({ page }) => {

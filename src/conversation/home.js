@@ -5,7 +5,7 @@ export const TOPICS = [
     id: 'feelings',
     label: 'Feelings',
     tag: 'Emotion',
-    icon: '❤️',
+    icon: '',
     tiles: [
       { text: 'I am feeling happy today', tag: 'Feeling' },
       { text: 'I feel very tired', tag: 'Feeling' },
@@ -19,7 +19,7 @@ export const TOPICS = [
     id: 'body',
     label: 'Body & Pain',
     tag: 'Physical',
-    icon: '🩺',
+    icon: '',
     tiles: [
       { text: 'Headache is bothering me', tag: 'Pain' },
       { text: 'My lower back is aching', tag: 'Pain' },
@@ -33,7 +33,7 @@ export const TOPICS = [
     id: 'people',
     label: 'People',
     tag: 'Contact',
-    icon: '👥',
+    icon: '',
     tiles: [
       { text: 'Please call Priya', tag: 'Contact' },
       { text: 'Please call Rohan', tag: 'Contact' },
@@ -47,7 +47,7 @@ export const TOPICS = [
     id: 'needs',
     label: 'Care Needs',
     tag: 'Daily Care',
-    icon: '💧',
+    icon: '',
     tiles: [
       { text: 'Water with straw please', tag: 'Need' },
       { text: 'Please adjust my pillow', tag: 'Need' },
@@ -61,7 +61,7 @@ export const TOPICS = [
     id: 'home',
     label: 'Home & Nurse',
     tag: 'Smart Home',
-    icon: '🏠',
+    icon: '',
     tiles: [
       { text: 'Turn on the lights', tag: 'Home', kind: 'lights', label: 'Lights On' },
       { text: 'Turn off the lights', tag: 'Home', kind: 'lights', label: 'Lights Off' },

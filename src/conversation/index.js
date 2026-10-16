@@ -1,36 +1,53 @@
 // Team B (teammate) owns everything in src/conversation/.
-// Implements the complete AAC conversation interface: layout, speech recognition,
-// Groq & Gemini replies, speech synthesis, categories, patient profile, spell mode, emergency.
-// Priority Round: Turn-based conversation rhythm (aac:heard, gaze:rest), speech pause during TTS,
-// full QWERTY keyboard screen, stop/listen audio tile, deduplication.
+// Implements the redesigned minimalist high-focus AAC interface:
+// - Three bands: Slim topbar (heard question + quiet menu), Hero (3x2 grid of 6 reply tiles, 30px semibold text),
+//   Bottom row (6 equal tiles: Yes, No, Wait, Keyboard, More, Emergency).
+// - Single palette (#0f1115, #181b21, #2a2e36, teal accent, red emergency), zero emojis, no bloat.
 
 import './conversation.css';
-import { getMemory, saveMemory, logInteraction, getDailyLog, getPinnedReplies, togglePinnedReply, getSelectedTone, setSelectedTone, logPainRecord, getPainLogs } from './memory.js';
-import { CATEGORIES, getOfflineReplies, getOfflineRoleReplies } from './categories.js';
+import {
+  getMemory,
+  saveMemory,
+  logInteraction,
+  getDailyLog,
+  getPinnedReplies,
+  togglePinnedReply,
+  getSelectedTone,
+  setSelectedTone,
+  logPainRecord
+} from './memory.js';
+import { CATEGORIES, getOfflineRoleReplies } from './categories.js';
 import { predictReplies, predictWordCompletions } from './groq.js';
 import { SpeechListener, speakPhrase } from './speech.js';
-import { SpellEngine, LETTER_GROUPS } from './spell.js';
 import { startEmergencyAlarm, stopEmergencyAlarm } from './emergency.js';
 import { TOPICS, dispatchHomeRequest, getWhatsAppShareUrl } from './home.js';
 import { LISTENER_LANGUAGES, translateText } from './translation.js';
 import { generateDailySummary } from './summary.js';
 
+const ICONS = {
+  keyboard: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"></path></svg>`,
+  more: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg>`,
+  emergency: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+  menu: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>`,
+  pin: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24Z"></path></svg>`
+};
+
 const PAIN_ZONES = [
-  { id: 'head', label: 'Head', labelHi: 'सिर', icon: '🧠', desc: 'Frontal / Temples' },
-  { id: 'chest', label: 'Chest', labelHi: 'छाती', icon: '🫁', desc: 'Lungs / Sternum' },
-  { id: 'stomach', label: 'Stomach', labelHi: 'पेट', icon: '🫄', desc: 'Abdomen / Digestion' },
-  { id: 'back', label: 'Back', labelHi: 'पीठ', icon: '🔙', desc: 'Spine / Upper & Lower' },
-  { id: 'left_arm', label: 'Left Arm', labelHi: 'बायाँ हाथ', icon: '💪', desc: 'Shoulder / Arm' },
-  { id: 'right_arm', label: 'Right Arm', labelHi: 'दायाँ हाथ', icon: '💪', desc: 'Shoulder / Arm' },
-  { id: 'left_leg', label: 'Left Leg', labelHi: 'बायाँ पैर', icon: '🦵', desc: 'Thigh / Knee / Foot' },
-  { id: 'right_leg', label: 'Right Leg', labelHi: 'दायाँ पैर', icon: '🦵', desc: 'Thigh / Knee / Foot' }
+  { id: 'head', label: 'Head', labelHi: 'सिर', desc: 'Frontal / Temples' },
+  { id: 'chest', label: 'Chest', labelHi: 'छाती', desc: 'Lungs / Sternum' },
+  { id: 'stomach', label: 'Stomach', labelHi: 'पेट', desc: 'Abdomen / Digestion' },
+  { id: 'back', label: 'Back', labelHi: 'पीठ', desc: 'Spine / Upper & Lower' },
+  { id: 'left_arm', label: 'Left Arm', labelHi: 'बायाँ हाथ', desc: 'Shoulder / Arm' },
+  { id: 'right_arm', label: 'Right Arm', labelHi: 'दायाँ हाथ', desc: 'Shoulder / Arm' },
+  { id: 'left_leg', label: 'Left Leg', labelHi: 'बायाँ पैर', desc: 'Thigh / Knee / Foot' },
+  { id: 'right_leg', label: 'Right Leg', labelHi: 'दायाँ पैर', desc: 'Thigh / Knee / Foot' }
 ];
 
 export function startConversation(app) {
   let memory = getMemory();
-  let patientLang = 'en-IN'; // patient's input language
-  let listenerLang = 'en-IN'; // caregiver / listener language ('en-IN' | 'hi-IN' | 'mr-IN')
-  let mode = 'chat'; // 'chat' | 'categories' | 'category_items' | 'spell' | 'type' | 'profile' | 'topics' | 'topic_items' | 'summary' | 'onboarding' | 'pain' | 'pain_scale' | 'pain_exact'
+  let patientLang = 'en-IN';
+  let listenerLang = 'en-IN';
+  let mode = 'chat'; // 'chat' | 'more' | 'pain' | 'pain_scale' | 'pain_exact' | 'type' | 'categories' | 'category_items' | 'topics' | 'topic_items' | 'home_requests' | 'pinned_list' | 'history_list' | 'tone_picker' | 'profile' | 'summary' | 'onboarding'
   let activeCategory = null;
   let activeTopic = null;
   let isEmergency = false;
@@ -40,45 +57,36 @@ export function startConversation(app) {
   let summaryReport = '';
   let heardText = 'Did you sleep well?';
   let heardFrom = 'mic'; // 'mic' | 'phone'
-  let showManualInput = false;
-  let fatigueAlert = null; // 'mild' | 'high' | null
-  let lastTranslation = null; // { original, translated, lang }
+  let showCaregiverMenu = false;
+  let fatigueAlert = null;
+  let lastTranslation = null;
 
-  // Rest state & Audio state (Turn-based rhythm)
   let isResting = false;
   let isAudioStopped = false;
   let lastUtteranceNormalized = '';
 
-  // Tone state (Round 5: Gentle, Urgent, Joking, Formal)
   let currentTone = getSelectedTone() || 'gentle';
-
-  // Clinical Pain & Body Map state (Round 5)
-  let selectedPainZone = PAIN_ZONES[2]; // default stomach
+  let selectedPainZone = PAIN_ZONES[2]; // stomach
   let selectedPainLevel = 'mild';
 
-  // Stable Board & Role-Based AI State (Round 4)
   let lastSpokenText = 'Yes, I slept well.';
-  let spokenHistory = ['Yes, I slept well.', 'Water with straw please.', 'Thank you.'];
+  let spokenHistory = ['Yes, I slept well.', 'Water with straw please.', 'Thank you so much.'];
   let pinnedReplies = getPinnedReplies();
   let roleReplies = getOfflineRoleReplies('Did you sleep well?', patientLang);
   let chatMounted = false;
 
-  // Type / QWERTY Keyboard State
   let typeBuffer = '';
   let typePredictions = ['I need', 'Thank you', 'Please help', 'Water', 'Yes', 'No'];
   let typePredictionTimer = null;
 
-  // Accessibility & Judge Demo Proof State
-  let isJudgeMode = true; // Enabled for judging demo
+  let isJudgeMode = true;
   let isHighContrast = false;
   let isLargeText = false;
-  let liveProof = null; // Speedup benchmark
   let speechDebounceTimer = null;
   let isAiRequestInFlight = false;
   let lastGazeSelectTime = 0;
   let lastGazeTarget = null;
 
-  // Check onboarding on first run
   const isOnboarded = localStorage.getItem('gaze_voice_onboarded') === 'true';
   if (!isOnboarded) {
     mode = 'onboarding';
@@ -88,22 +96,14 @@ export function startConversation(app) {
     { speaker: 'other', text: 'Did you sleep well?' }
   ];
 
-  let replies = getOfflineReplies('Did you sleep well?', patientLang);
-
-  const spellEngine = new SpellEngine({
-    onBufferChange: () => render(),
-    onPredictionsChange: () => render()
-  });
-
-  // Listen for rest state from Team A's rest mode
+  // Rest state listener
   window.addEventListener('gaze:rest', (e) => {
     isResting = !!e.detail?.resting;
   });
 
-  // Listen for remote questions from Caregiver Phone (Round 5)
+  // Remote question listener from Caregiver Phone
   window.addEventListener('aac:remote-question', (e) => {
     const text = e.detail?.text;
-    const from = e.detail?.from || 'Caregiver Phone';
     if (!text || !text.trim()) return;
     heardFrom = 'phone';
     heardText = text.trim();
@@ -112,7 +112,22 @@ export function startConversation(app) {
     render();
   });
 
-  // Listen for fatigue events from Team A's gaze engine
+  // External heard question listener (handles questions from judge mode / tests / external triggers)
+  window.addEventListener('aac:heard', (e) => {
+    const text = e.detail?.text;
+    const source = e.detail?.source || 'external';
+    if (source === 'mic' || source === 'phone' || source === 'internal') return;
+    if (!text || !text.trim()) return;
+    const normalized = text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    if (normalized === lastUtteranceNormalized) return;
+    heardText = text.trim();
+    heardFrom = source === 'phone' ? 'phone' : 'mic';
+    history.push({ speaker: 'other', text: heardText });
+    handleNewUtterance(heardText, 'internal');
+    render();
+  });
+
+  // Fatigue listener
   window.addEventListener('gaze:fatigue', (e) => {
     const level = e.detail?.level;
     if (level === 'mild' || level === 'high') {
@@ -121,7 +136,7 @@ export function startConversation(app) {
     }
   });
 
-  // Speech recognition listener with debouncing
+  // Speech recognition listener
   const listener = new SpeechListener({
     onTranscript: ({ text, isFinal }) => {
       heardText = text;
@@ -141,40 +156,36 @@ export function startConversation(app) {
     }
   });
 
-  // Start listening by default (continuous)
   listener.start();
 
   async function handleNewUtterance(text, source = 'mic') {
     if (!text || !text.trim()) return;
 
-    // Filter fragments under 3 words unless ending in '?'
     const words = text.trim().split(/\s+/).filter(Boolean);
     const isQuestion = text.trim().endsWith('?');
     if (words.length < 3 && !isQuestion) {
       return;
     }
 
-    // Dedupe identical or near-identical text
     const normalized = text.toLowerCase().replace(/[^\w\s]/g, '').trim();
     if (normalized === lastUtteranceNormalized) {
       return;
     }
     lastUtteranceNormalized = normalized;
 
-    // Contract event: aac:heard wakes the app!
-    window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text, source } }));
+    if (source !== 'internal') {
+      window.dispatchEvent(new CustomEvent('aac:heard', { detail: { text, source } }));
+    }
     isResting = false;
 
-    // 1. Instant feel: immediately display offline contextual role replies (0ms delay)
+    // Instant offline role replies
     roleReplies = getOfflineRoleReplies(text, patientLang);
     isLoadingReplies = true;
     updateChatBoardInPlace();
 
-    // 2. Throttle: ignore concurrent duplicate requests
     if (isAiRequestInFlight) return;
     isAiRequestInFlight = true;
 
-    // 3. Fetch AI replies (Groq -> 4s Gemini fallback -> offline)
     try {
       const aiReplies = await predictReplies({
         utterance: text,
@@ -198,28 +209,12 @@ export function startConversation(app) {
   async function handleSelectPhrase(phraseText, kind = 'conversation', category = 'general') {
     if (!phraseText) return;
 
-    // Update stable board history and repeat memory
     lastSpokenText = phraseText;
     if (!spokenHistory.includes(phraseText)) {
       spokenHistory.unshift(phraseText);
       if (spokenHistory.length > 5) spokenHistory.pop();
     }
 
-    // Live proof calculation vs traditional letter-by-letter scanning
-    const charCount = phraseText.trim().length;
-    const scanningTime = (charCount * 1.5).toFixed(1);
-    const gazeTime = 1.2;
-    const speedup = Math.round((charCount * 1.5) / gazeTime);
-    liveProof = {
-      phrase: phraseText,
-      chars: charCount,
-      scanningSecs: scanningTime,
-      scanningSelections: charCount,
-      gazeSecs: gazeTime,
-      speedup: Math.max(1, speedup)
-    };
-
-    // 1. Live translation if listener language is different from English
     let textToSpeak = phraseText;
     if (listenerLang !== 'en-IN') {
       textToSpeak = await translateText({ text: phraseText, targetLang: listenerLang });
@@ -232,14 +227,12 @@ export function startConversation(app) {
       lastTranslation = null;
     }
 
-    // 2. Text-to-speech output (pausing speech recognition while speaking to prevent self-hearing)
     speakPhrase(textToSpeak, listenerLang, {
       tone: currentTone,
       onStart: () => listener.pauseForSpeech(),
       onEnd: () => listener.resumeAfterSpeech(500)
     });
 
-    // 3. Contract event: aac:spoken dispatched on window for caregiver companion
     window.dispatchEvent(
       new CustomEvent('aac:spoken', {
         detail: {
@@ -250,7 +243,6 @@ export function startConversation(app) {
       })
     );
 
-    // 4. Log interaction into patient memory
     logInteraction({
       heard: heardText,
       reply: phraseText,
@@ -279,14 +271,12 @@ export function startConversation(app) {
       ? `मेरे ${zoneName} में दर्द है, ${levelStr === 'severe' ? 'बहुत तेज' : levelStr === 'moderate' ? 'मध्यम' : 'हल्का'}, 10 में से ${scoreVal}`
       : `My ${zoneName} hurts, ${levelStr}, ${scoreVal} out of 10.`;
 
-    // 1. Text-to-speech with tone (Urgent if severe)
     speakPhrase(spokenText, listenerLang, {
       tone: scoreVal >= 7 ? 'urgent' : currentTone,
       onStart: () => listener.pauseForSpeech(),
       onEnd: () => listener.resumeAfterSpeech(500)
     });
 
-    // 2. Contract event: aac:spoken
     window.dispatchEvent(
       new CustomEvent('aac:spoken', {
         detail: {
@@ -297,14 +287,12 @@ export function startConversation(app) {
       })
     );
 
-    // 3. Log to memory.js (daily summary)
     logPainRecord({
       zone: zone?.label || 'Body',
       level: levelStr,
       score: scoreVal
     });
 
-    // 4. Severe (7+) dispatches aac:request { kind: 'pain', label: 'Severe <zone> pain <X>/10' }
     if (scoreVal >= 7) {
       window.dispatchEvent(
         new CustomEvent('aac:request', {
@@ -316,7 +304,6 @@ export function startConversation(app) {
       );
     }
 
-    // 5. Update interaction history and return cleanly to chat
     history.push({ speaker: 'patient', text: spokenText });
     lastSpokenText = spokenText;
     if (!spokenHistory.includes(spokenText)) {
@@ -328,17 +315,9 @@ export function startConversation(app) {
     render();
   }
 
-  function handleHomeAction(item) {
-    // Dispatch smart home request
-    dispatchHomeRequest(item.kind, item.label);
-    handleSelectPhrase(item.text, 'request', 'home');
-  }
-
   function triggerEmergency() {
     isEmergency = true;
     startEmergencyAlarm();
-
-    // Contract event: aac:emergency dispatched on window
     window.dispatchEvent(new CustomEvent('aac:emergency'));
 
     logInteraction({
@@ -413,7 +392,7 @@ export function startConversation(app) {
     }, 200);
   }
 
-  // Unified action handler with click double-fire prevention
+  // Unified action handler
   function handleAction(target) {
     const action = target.dataset.action;
     const value = target.dataset.value;
@@ -422,9 +401,6 @@ export function startConversation(app) {
       triggerEmergency();
     } else if (action === 'dismiss-emergency') {
       dismissEmergency();
-    } else if (action === 'fatigue-rest') {
-      fatigueAlert = null;
-      handleSelectPhrase("I am feeling tired. I'd like to rest my eyes.", 'fatigue', 'health');
     } else if (action === 'core-yes') {
       handleSelectPhrase(patientLang.startsWith('hi') ? 'हाँ' : 'Yes', 'affirmation', 'core');
     } else if (action === 'core-no') {
@@ -435,22 +411,80 @@ export function startConversation(app) {
       if (lastSpokenText) {
         handleSelectPhrase(lastSpokenText, 'repeat', 'core');
       }
-    } else if (action === 'history-repeat') {
-      if (value) {
-        handleSelectPhrase(value, 'history', 'core');
-      }
-    } else if (action === 'pinned-phrase') {
-      if (value) {
-        handleSelectPhrase(value, 'pinned', 'core');
-      }
+    } else if (action === 'open-more') {
+      mode = 'more';
+      chatMounted = false;
+      render();
+    } else if (action === 'reply') {
+      handleSelectPhrase(value || target.querySelector('.conv-reply-text')?.textContent || target.textContent);
     } else if (action === 'toggle-pin') {
       const role = target.dataset.role;
       const text = target.dataset.text || roleReplies[role]?.text;
-      const tag = target.dataset.tag || roleReplies[role]?.tag || 'Pinned';
-      pinnedReplies = togglePinnedReply(role, text, tag);
+      pinnedReplies = togglePinnedReply(role, text, 'Pinned');
       updateChatBoardInPlace();
-    } else if (action === 'reply') {
-      handleSelectPhrase(value || target.querySelector('.conv-tile-text')?.textContent || target.textContent);
+    } else if (action === 'nav-type' || action === 'open-keyboard') {
+      mode = 'type';
+      chatMounted = false;
+      fetchTypePredictions(typeBuffer);
+      render();
+    } else if (action === 'nav-pain') {
+      mode = 'pain';
+      chatMounted = false;
+      render();
+    } else if (action === 'pain-zone-select') {
+      selectedPainZone = PAIN_ZONES.find((z) => z.id === value) || PAIN_ZONES[0];
+      mode = 'pain_scale';
+      render();
+    } else if (action === 'pain-to-exact') {
+      mode = 'pain_exact';
+      render();
+    } else if (action === 'pain-confirm') {
+      const score = target.dataset.score || value || '8';
+      const level = target.dataset.level || (score <= 3 ? 'mild' : score <= 6 ? 'moderate' : 'severe');
+      handlePainConfirm({ zone: selectedPainZone, level, score });
+    } else if (action === 'nav-categories') {
+      mode = 'categories';
+      chatMounted = false;
+      render();
+    } else if (action === 'category-select') {
+      activeCategory = CATEGORIES.find((c) => c.id === value) || null;
+      mode = 'category_items';
+      render();
+    } else if (action === 'nav-home') {
+      mode = 'home_requests';
+      chatMounted = false;
+      render();
+    } else if (action === 'home-request') {
+      dispatchHomeRequest(target.dataset.kind, target.dataset.label);
+      handleSelectPhrase(target.dataset.text, 'request', 'home');
+    } else if (action === 'nav-pinned') {
+      mode = 'pinned_list';
+      chatMounted = false;
+      render();
+    } else if (action === 'nav-history') {
+      mode = 'history_list';
+      chatMounted = false;
+      render();
+    } else if (action === 'nav-tone') {
+      mode = 'tone_picker';
+      chatMounted = false;
+      render();
+    } else if (action === 'select-tone') {
+      currentTone = value || 'gentle';
+      setSelectedTone(currentTone);
+      mode = 'chat';
+      chatMounted = false;
+      render();
+    } else if (action === 'toggle-audio') {
+      if (isAudioStopped) {
+        listener.start();
+        isAudioStopped = false;
+      } else {
+        window.speechSynthesis.cancel();
+        listener.stop();
+        isAudioStopped = true;
+      }
+      render();
     } else if (action === 'nav-topics') {
       mode = 'topics';
       chatMounted = false;
@@ -462,18 +496,22 @@ export function startConversation(app) {
     } else if (action === 'topic-item-select') {
       const item = JSON.parse(value || '{}');
       if (item.kind) {
-        handleHomeAction(item);
+        dispatchHomeRequest(item.kind, item.label);
+        handleSelectPhrase(item.text, 'request', 'home');
       } else {
         handleSelectPhrase(item.text, 'topic', activeTopic?.id || 'general');
       }
-    } else if (action === 'nav-categories') {
-      mode = 'categories';
-      chatMounted = false;
-      render();
-    } else if (action === 'nav-type' || action === 'nav-spell') {
-      mode = 'type';
-      chatMounted = false;
-      fetchTypePredictions(typeBuffer);
+    } else if (action === 'nav-back') {
+      if (mode === 'category_items') {
+        mode = 'categories';
+      } else if (mode === 'topic_items') {
+        mode = 'topics';
+      } else if (mode === 'pain_exact' || mode === 'pain_scale') {
+        mode = 'pain';
+      } else {
+        mode = 'chat';
+        chatMounted = false;
+      }
       render();
     } else if (action === 'type-key') {
       typeBuffer += value;
@@ -511,80 +549,12 @@ export function startConversation(app) {
     } else if (action === 'type-whatsapp') {
       const text = typeBuffer.trim() || 'Hello, I am sending this message via Gaze Voice.';
       window.open(getWhatsAppShareUrl(text), '_blank');
-    } else if (action === 'audio-stop') {
-      window.speechSynthesis.cancel();
-      listener.stop();
-      isAudioStopped = true;
+    } else if (action === 'open-caregiver-menu') {
+      showCaregiverMenu = true;
       render();
-    } else if (action === 'audio-listen') {
-      isAudioStopped = false;
-      listener.start();
+    } else if (action === 'close-caregiver-menu') {
+      showCaregiverMenu = false;
       render();
-    } else if (action === 'nav-back') {
-      if (mode === 'category_items') {
-        mode = 'categories';
-      } else if (mode === 'topic_items') {
-        mode = 'topics';
-      } else if (mode === 'pain_exact' || mode === 'pain_scale') {
-        mode = 'pain';
-      } else {
-        mode = 'chat';
-        chatMounted = false;
-      }
-      render();
-    } else if (action === 'set-tone') {
-      currentTone = value || 'gentle';
-      setSelectedTone(currentTone);
-      const toneBtns = app.querySelectorAll('.conv-tile-tone');
-      toneBtns.forEach((btn) => {
-        btn.classList.toggle('is-active', btn.dataset.value === currentTone);
-      });
-      if (heardText && !isAiRequestInFlight) {
-        handleNewUtterance(heardText, heardFrom);
-      }
-    } else if (action === 'nav-pain') {
-      mode = 'pain';
-      chatMounted = false;
-      render();
-    } else if (action === 'pain-zone-select') {
-      selectedPainZone = PAIN_ZONES.find((z) => z.id === value) || PAIN_ZONES[0];
-      mode = 'pain_scale';
-      render();
-    } else if (action === 'pain-to-exact') {
-      mode = 'pain_exact';
-      render();
-    } else if (action === 'pain-confirm') {
-      const score = target.dataset.score || value || '8';
-      const level = target.dataset.level || (score <= 3 ? 'mild' : score <= 6 ? 'moderate' : 'severe');
-      handlePainConfirm({ zone: selectedPainZone, level, score });
-    } else if (action === 'category-select') {
-      activeCategory = CATEGORIES.find((c) => c.id === value) || null;
-      mode = 'category_items';
-      render();
-    } else if (action === 'spell-group') {
-      spellEngine.selectGroup(value);
-      render();
-    } else if (action === 'spell-letter') {
-      spellEngine.addLetter(value);
-    } else if (action === 'spell-prediction') {
-      spellEngine.selectPrediction(value);
-    } else if (action === 'spell-space') {
-      spellEngine.addSpace();
-    } else if (action === 'spell-backspace') {
-      spellEngine.backspace();
-    } else if (action === 'spell-clear') {
-      spellEngine.clear();
-    } else if (action === 'spell-speak') {
-      if (spellEngine.buffer.trim()) {
-        handleSelectPhrase(spellEngine.buffer.trim(), 'spell', 'keyboard');
-        spellEngine.clear();
-        mode = 'chat';
-        chatMounted = false;
-        render();
-      }
-    } else if (action === 'spell-whatsapp') {
-      const text = spellEngine.buffer.trim() || 'Hello, this is Aarav Sharma sending a message via Gaze Voice.';
-      window.open(getWhatsAppShareUrl(text), '_blank');
     } else if (action === 'toggle-lang') {
       togglePatientLanguage();
     } else if (action === 'toggle-listener-lang') {
@@ -602,10 +572,8 @@ export function startConversation(app) {
     } else if (action === 'toggle-size') {
       isLargeText = !isLargeText;
       render();
-    } else if (action === 'toggle-input') {
-      showManualInput = !showManualInput;
-      render();
     } else if (action === 'open-profile') {
+      showCaregiverMenu = false;
       mode = 'profile';
       chatMounted = false;
       render();
@@ -614,6 +582,7 @@ export function startConversation(app) {
       chatMounted = false;
       render();
     } else if (action === 'open-summary') {
+      showCaregiverMenu = false;
       openSummaryView();
     } else if (action === 'close-summary') {
       mode = 'chat';
@@ -622,7 +591,6 @@ export function startConversation(app) {
     }
   }
 
-  // Double-fire prevention: gaze-select sets timestamp and suppresses click on same target within 500ms
   function onGazeSelect(e) {
     const pinBtn = e.target.closest('.conv-pin-btn');
     if (pinBtn) {
@@ -643,37 +611,133 @@ export function startConversation(app) {
       handleAction(pinBtn);
       return;
     }
-    const target = e.target.closest('[data-gaze-target]');
-    if (!target) return;
+    const actionEl = e.target.closest('[data-action], [data-gaze-target], .conv-menu-btn, .conv-btn, .conv-modal-close');
+    if (!actionEl) return;
     const now = performance.now();
-    if (target === lastGazeTarget && (now - lastGazeSelectTime) < 500) {
-      return; // Ignore duplicate click event
+    if (actionEl === lastGazeTarget && now - lastGazeSelectTime < 300) {
+      return;
     }
-    handleAction(target);
+    handleAction(actionEl);
   }
 
   app.addEventListener('gaze-select', onGazeSelect);
   app.addEventListener('click', onClick);
 
-  // In-place stable board updater: mutates DOM nodes without recreation, preserving Team A dwell tracking
+  function renderCaregiverMenuModal() {
+    let container = app.querySelector('.conv-caregiver-modal-container');
+    if (!showCaregiverMenu) {
+      if (container) container.remove();
+      return;
+    }
+    if (!container) {
+      container = document.createElement('div');
+      container.className = 'conv-caregiver-modal-container';
+      app.appendChild(container);
+    }
+    const listenerObj = LISTENER_LANGUAGES.find((l) => l.code === listenerLang) || LISTENER_LANGUAGES[0];
+    container.innerHTML = `
+      <div class="conv-modal-overlay">
+        <div class="conv-modal-card">
+          <div class="conv-modal-header">
+            <h2 class="conv-modal-title">Caregiver Settings</h2>
+            <button class="conv-modal-close" data-action="close-caregiver-menu">Close</button>
+          </div>
+          
+          <div class="conv-setting-row">
+            <div>
+              <div class="conv-setting-label">Microphone Listening</div>
+              <div class="conv-setting-desc">Continuous room audio capture</div>
+            </div>
+            <button class="conv-btn ${isListening ? 'btn-active' : ''}" data-action="toggle-mic">
+              ${isListening ? 'Active' : 'Paused'}
+            </button>
+          </div>
+
+          <div class="conv-setting-row">
+            <div>
+              <div class="conv-setting-label">Patient Language</div>
+              <div class="conv-setting-desc">Recognition & prediction language</div>
+            </div>
+            <button class="conv-btn btn-active" data-action="toggle-lang">
+              ${patientLang === 'en-IN' ? 'English (India)' : 'Hindi'}
+            </button>
+          </div>
+
+          <div class="conv-setting-row">
+            <div>
+              <div class="conv-setting-label">Listener Voice Language</div>
+              <div class="conv-setting-desc">Spoken output translation</div>
+            </div>
+            <button class="conv-btn btn-active" data-action="toggle-listener-lang">
+              ${escapeHtml(listenerObj.name)}
+            </button>
+          </div>
+
+          <div class="conv-setting-row">
+            <div>
+              <div class="conv-setting-label">High Contrast</div>
+              <div class="conv-setting-desc">High visibility border styling</div>
+            </div>
+            <button class="conv-btn ${isHighContrast ? 'btn-active' : ''}" data-action="toggle-contrast">
+              ${isHighContrast ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+
+          <div class="conv-setting-row">
+            <div>
+              <div class="conv-setting-label">Large Text</div>
+              <div class="conv-setting-desc">Increase font sizing</div>
+            </div>
+            <button class="conv-btn ${isLargeText ? 'btn-active' : ''}" data-action="toggle-size">
+              ${isLargeText ? 'Large' : 'Normal'}
+            </button>
+          </div>
+
+          <div class="conv-setting-row">
+            <div>
+              <div class="conv-setting-label">Judge Demo Prompt</div>
+              <div class="conv-setting-desc">Subtle helper line below question</div>
+            </div>
+            <button class="conv-btn ${isJudgeMode ? 'btn-active' : ''}" data-action="toggle-demo">
+              ${isJudgeMode ? 'Visible' : 'Hidden'}
+            </button>
+          </div>
+
+          <div style="padding: 12px 0; border-bottom: 1px solid rgba(42, 46, 54, 0.5);">
+            <div class="conv-setting-label" style="margin-bottom:8px;">Ask a Question</div>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="manual-utterance" class="conv-input" placeholder="Type question for patient..." />
+              <button class="conv-btn btn-primary" id="btn-submit-manual">Ask</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:12px; margin-top:8px;">
+            <button class="conv-btn" data-action="open-profile" style="flex:1;">Patient Profile & Meds</button>
+            <button class="conv-btn" data-action="open-summary" style="flex:1;">Daily Medical Summary</button>
+          </div>
+        </div>
+      </div>
+    `;
+    hookManualInput();
+  }
+
+  // In-place stable board updater
   function updateChatBoardInPlace() {
     if (mode !== 'chat' || isEmergency) {
       render();
       return;
     }
 
-    const board = app.querySelector('.conv-board');
-    if (!board) {
+    const hero = app.querySelector('.conv-hero-grid');
+    if (!hero) {
       render();
       return;
     }
 
-    const isHi = patientLang.startsWith('hi');
-
-    // 1. Update heard text in top bar
+    // 1. Update heard question
     const heardEl = app.querySelector('.conv-heard-text');
     if (heardEl) {
-      const displayTxt = heardText || (isListening ? 'Listening for speech...' : 'Microphone paused');
+      const displayTxt = heardText || (isListening ? 'Listening...' : 'Microphone paused');
       if (heardEl.textContent.trim() !== displayTxt) {
         heardEl.textContent = displayTxt;
       }
@@ -681,68 +745,11 @@ export function startConversation(app) {
 
     const phoneBadge = app.querySelector('.conv-phone-badge');
     if (phoneBadge) {
-      phoneBadge.style.display = heardFrom === 'phone' ? 'inline-flex' : 'none';
+      phoneBadge.style.display = heardFrom === 'phone' ? 'inline-block' : 'none';
     }
 
-    const micDot = app.querySelector('.conv-mic-dot');
-    if (micDot) {
-      micDot.classList.toggle('active', isListening);
-    }
-
-    const loadingPill = app.querySelector('.conv-loading-pill');
-    if (loadingPill) {
-      loadingPill.style.display = isLoadingReplies ? 'inline-block' : 'none';
-    }
-
-    // 2. Update Core Zone Repeat Tile
-    const repeatTile = app.querySelector('#tile-repeat');
-    if (repeatTile) {
-      repeatTile.dataset.value = lastSpokenText || '';
-      const textSpan = repeatTile.querySelector('.conv-tile-text');
-      if (textSpan) {
-        const repeatLabel = isHi ? '🔁 दोहराएं' : '🔁 Repeat';
-        textSpan.textContent = lastSpokenText ? `${repeatLabel}: "${lastSpokenText}"` : repeatLabel;
-      }
-    }
-
-    // 3. Update History Strip
-    const h1Tile = app.querySelector('#tile-hist-0');
-    const h2Tile = app.querySelector('#tile-hist-1');
-    const h3Tile = app.querySelector('#tile-hist-2');
-    const hist = [h1Tile, h2Tile, h3Tile];
-    for (let i = 0; i < 3; i++) {
-      const el = hist[i];
-      if (el) {
-        const phrase = spokenHistory[i] || '';
-        el.dataset.value = phrase;
-        el.style.opacity = phrase ? '1' : '0.4';
-        const txt = el.querySelector('.conv-tile-text');
-        if (txt) {
-          txt.textContent = phrase ? `🕒 "${phrase}"` : `🕒 (Empty)`;
-        }
-      }
-    }
-
-    // 4. Update Pinned phrase in aux row
-    const pinnedTile = app.querySelector('#tile-pinned');
-    if (pinnedTile) {
-      const pinnedKeys = Object.keys(pinnedReplies);
-      const firstPinned = pinnedKeys.length > 0 ? pinnedReplies[pinnedKeys[0]] : null;
-      if (firstPinned) {
-        pinnedTile.dataset.value = firstPinned.text;
-        pinnedTile.style.opacity = '1';
-        const txt = pinnedTile.querySelector('.conv-tile-text');
-        if (txt) txt.textContent = `📌 "${firstPinned.text}"`;
-      } else {
-        pinnedTile.dataset.value = '';
-        pinnedTile.style.opacity = '0.5';
-        const txt = pinnedTile.querySelector('.conv-tile-text');
-        if (txt) txt.textContent = `📌 (Pin phrases)`;
-      }
-    }
-
-    // 5. Update Fixed Role Slots in place
-    const roles = ['agree', 'decline', 'need', 'feeling', 'ask_back'];
+    // 2. Update the 6 hero slot tiles in place
+    const roles = ['agree', 'decline', 'need', 'feeling', 'ask_back', 'other'];
     for (const role of roles) {
       const slotEl = app.querySelector(`#slot-${role}`);
       if (!slotEl) continue;
@@ -752,78 +759,31 @@ export function startConversation(app) {
       if (!data) continue;
 
       const text = data.text;
-      const tag = isPinned ? '📌 PINNED' : data.tag;
-
       slotEl.classList.toggle('is-pinned', isPinned);
       slotEl.dataset.value = text;
       slotEl.dataset.role = role;
-      slotEl.dataset.text = text;
-      slotEl.dataset.tag = tag;
 
-      const textEl = slotEl.querySelector('.conv-tile-text');
+      const textEl = slotEl.querySelector('.conv-reply-text');
       if (textEl && textEl.textContent !== text) {
         textEl.textContent = text;
-      }
-      const tagEl = slotEl.querySelector('.conv-tile-tag');
-      if (tagEl && tagEl.textContent !== tag) {
-        tagEl.textContent = tag;
       }
 
       const pinBtn = slotEl.querySelector('.conv-pin-btn');
       if (pinBtn) {
         pinBtn.dataset.role = role;
         pinBtn.dataset.text = text;
-        pinBtn.dataset.tag = data.tag || 'Pinned';
-        pinBtn.textContent = isPinned ? '📌' : '📍';
-        pinBtn.title = isPinned ? 'Click to unpin' : 'Click to pin permanently';
+        pinBtn.title = isPinned ? 'Unpin' : 'Pin';
       }
     }
 
-    // Slot 6: Something Else
-    const slotOther = app.querySelector('#slot-other');
-    if (slotOther) {
-      const otherTxt = slotOther.querySelector('.conv-tile-text');
-      if (otherTxt) {
-        otherTxt.textContent = isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else';
-      }
-    }
-
-    // 7. Update Tone Selector Row in place
-    const toneTiles = app.querySelectorAll('.conv-tile-tone');
-    toneTiles.forEach((tile) => {
-      tile.classList.toggle('is-active', tile.dataset.value === currentTone);
-    });
-
-    // Update audio button in sidebar
-    const audioBtn = app.querySelector('[data-action="audio-stop"], [data-action="audio-listen"]');
-    if (audioBtn) {
-      if (isAudioStopped) {
-        audioBtn.dataset.action = 'audio-listen';
-        audioBtn.style.borderColor = '#00e676';
-        audioBtn.style.background = 'rgba(0,230,118,0.12)';
-        const tag = audioBtn.querySelector('.conv-tile-tag');
-        if (tag) tag.textContent = 'Audio';
-        const txt = audioBtn.querySelector('.conv-tile-text');
-        if (txt) txt.textContent = '▶️ Listen';
-      } else {
-        audioBtn.dataset.action = 'audio-stop';
-        audioBtn.style.borderColor = '#ff9800';
-        audioBtn.style.background = 'rgba(255,152,0,0.12)';
-        const tag = audioBtn.querySelector('.conv-tile-tag');
-        if (tag) tag.textContent = 'Audio';
-        const txt = audioBtn.querySelector('.conv-tile-text');
-        if (txt) txt.textContent = '⏹️ Stop';
-      }
-    }
+    renderCaregiverMenuModal();
   }
 
   function render() {
-    // Accessibility modifier classes
     app.classList.toggle('contrast-high', isHighContrast);
     app.classList.toggle('text-large', isLargeText);
 
-    // If already mounted in chat mode, mutate DOM in-place without replacing elements
-    if (mode === 'chat' && chatMounted && app.querySelector('.conv-board')) {
+    if (mode === 'chat' && chatMounted && app.querySelector('.conv-hero-grid')) {
       updateChatBoardInPlace();
       return;
     }
@@ -831,21 +791,18 @@ export function startConversation(app) {
     const isHi = patientLang.startsWith('hi');
     const listenerObj = LISTENER_LANGUAGES.find((l) => l.code === listenerLang) || LISTENER_LANGUAGES[0];
 
-    // 1. Emergency Fullscreen Modal
+    // 1. Emergency Fullscreen Alert
     if (isEmergency) {
       app.innerHTML = `
         <div class="conv-emergency-modal">
-          <div class="conv-emergency-banner">
-            <span>🚨</span> PATIENT NEEDS HELP <span>🚨</span>
+          <div class="conv-emergency-title">PATIENT NEEDS ASSISTANCE</div>
+          <div class="conv-emergency-details">
+            <strong>${escapeHtml(memory.name)}</strong> · ${escapeHtml(memory.condition)}<br/>
+            Medications: ${escapeHtml(memory.meds)}<br/>
+            Contacts: ${escapeHtml(memory.familyNames)}
           </div>
-          <div class="conv-emergency-sub">
-            <strong>${memory.name}</strong> • ${memory.condition}<br/>
-            Usual needs: ${memory.usualNeeds}<br/>
-            Daily Meds: ${memory.meds}<br/>
-            Emergency contacts: ${memory.familyNames}
-          </div>
-          <button class="conv-tile conv-emergency-dismiss" data-gaze-target data-gaze-dwell="1200" data-action="dismiss-emergency">
-            <span class="conv-tile-text">DISMISS ALARM</span>
+          <button class="conv-emergency-dismiss" data-gaze-target data-gaze-dwell="1200" data-action="dismiss-emergency">
+            Dismiss Alarm
             <div class="conv-tile-dwell-ring"></div>
           </button>
         </div>
@@ -853,41 +810,40 @@ export function startConversation(app) {
       return;
     }
 
-    // 2. First-Run Patient Onboarding Modal
+    // 2. Onboarding Modal (First Run)
     if (mode === 'onboarding') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
           <div class="conv-modal-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-              <h2 style="margin:0; color:var(--conv-accent);">👋 Welcome to Gaze Voice</h2>
-              <span class="conv-caregiver-badge">Caregiver Setup (Keyboard & Mouse)</span>
+            <div class="conv-modal-header">
+              <h2 class="conv-modal-title">Patient Profile Setup</h2>
             </div>
-            <p style="color:var(--conv-text-muted); font-size:0.95rem; margin-top:0;">
-              Caregiver: Please customize the patient profile below to enable personalized AI predictions and medication reminders.
+            <p style="color:var(--conv-text-muted); font-size:14px; margin:0;">
+              Configure patient details to enable personal AI replies and medication tracking.
             </p>
-            <div class="conv-form-group">
-              <label>Patient Name</label>
-              <input type="text" id="onboard-name" value="${escapeHtml(memory.name)}" />
+            <div>
+              <label class="conv-setting-label">Patient Name</label>
+              <input type="text" id="onboard-name" class="conv-input" value="${escapeHtml(memory.name)}" style="margin-top:4px;" />
             </div>
-            <div class="conv-form-group">
-              <label>Condition & Needs</label>
-              <input type="text" id="onboard-condition" value="${escapeHtml(memory.condition)}" />
+            <div>
+              <label class="conv-setting-label">Condition & Needs</label>
+              <input type="text" id="onboard-condition" class="conv-input" value="${escapeHtml(memory.condition)}" style="margin-top:4px;" />
             </div>
-            <div class="conv-form-group">
-              <label>Family & Caregivers</label>
-              <input type="text" id="onboard-family" value="${escapeHtml(memory.familyNames)}" />
+            <div>
+              <label class="conv-setting-label">Family & Caregivers</label>
+              <input type="text" id="onboard-family" class="conv-input" value="${escapeHtml(memory.familyNames)}" style="margin-top:4px;" />
             </div>
-            <div class="conv-form-group">
-              <label>Scheduled Meds & Times</label>
-              <input type="text" id="onboard-meds" value="${escapeHtml(memory.meds)}" />
+            <div>
+              <label class="conv-setting-label">Scheduled Meds & Times</label>
+              <input type="text" id="onboard-meds" class="conv-input" value="${escapeHtml(memory.meds)}" style="margin-top:4px;" />
             </div>
-            <div class="conv-form-group">
-              <label>Likes & Interests</label>
-              <input type="text" id="onboard-likes" value="${escapeHtml(memory.likes)}" />
+            <div>
+              <label class="conv-setting-label">Likes & Interests</label>
+              <input type="text" id="onboard-likes" class="conv-input" value="${escapeHtml(memory.likes)}" style="margin-top:4px;" />
             </div>
-            <div class="conv-modal-actions">
-              <button class="conv-btn-pill active" id="btn-save-onboarding" style="padding:10px 24px; font-size:1.05rem;">
-                🚀 Start Communication
+            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+              <button class="conv-btn btn-primary" id="btn-save-onboarding" style="padding:10px 28px; font-size:15px;">
+                Start
               </button>
             </div>
           </div>
@@ -913,24 +869,24 @@ export function startConversation(app) {
       return;
     }
 
-    // 3. Doctor/Family Daily Summary Modal (Caregiver-Only)
+    // 3. Clinical Summary Modal
     if (mode === 'summary') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
-          <div class="conv-modal-card conv-summary-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-              <h2 style="margin:0; color:var(--conv-accent);">📊 Daily Medical & Care Summary</h2>
-              <span class="conv-caregiver-badge">Clinician View (Keyboard & Mouse)</span>
+          <div class="conv-modal-card" style="max-width:760px;">
+            <div class="conv-modal-header">
+              <h2 class="conv-modal-title">Daily Medical & Care Summary</h2>
+              <button class="conv-modal-close" data-action="close-summary">Close</button>
             </div>
             ${
               isLoadingSummary
-                ? '<div style="padding:40px; text-align:center; font-size:1.3rem; color:var(--conv-accent);">Generating clinical report with AI...</div>'
-                : `<div class="conv-summary-text" id="summary-content">${escapeHtml(summaryReport)}</div>`
+                ? '<div style="padding:40px; text-align:center; color:var(--conv-accent);">Generating clinical report...</div>'
+                : `<pre style="white-space:pre-wrap; font-family:inherit; font-size:14px; line-height:1.5; color:#cbd5e1; margin:0;">${escapeHtml(summaryReport)}</pre>`
             }
-            <div class="conv-modal-actions">
-              <button class="conv-btn-pill" id="btn-copy-summary">📋 Copy Report</button>
-              <button class="conv-btn-pill" id="btn-print-summary">🖨️ Print / Save PDF</button>
-              <button class="conv-btn-pill active" data-action="close-summary">✕ Close</button>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+              <button class="conv-btn" id="btn-copy-summary">Copy Report</button>
+              <button class="conv-btn" id="btn-print-summary">Print / PDF</button>
+              <button class="conv-btn btn-primary" data-action="close-summary">Close</button>
             </div>
           </div>
         </div>
@@ -939,8 +895,8 @@ export function startConversation(app) {
       if (btnCopy) {
         btnCopy.onclick = () => {
           navigator.clipboard.writeText(summaryReport);
-          btnCopy.textContent = '✅ Copied!';
-          setTimeout(() => { btnCopy.textContent = '📋 Copy Report'; }, 2000);
+          btnCopy.textContent = 'Copied';
+          setTimeout(() => { btnCopy.textContent = 'Copy Report'; }, 2000);
         };
       }
       const btnPrint = app.querySelector('#btn-print-summary');
@@ -950,46 +906,42 @@ export function startConversation(app) {
       return;
     }
 
-    // 4. Caregiver Memory & Profile Settings Modal (Caregiver-Only)
+    // 4. Patient Profile Settings Modal
     if (mode === 'profile') {
       app.innerHTML = `
         <div class="conv-modal-overlay">
           <div class="conv-modal-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-              <h2 style="margin:0; color:var(--conv-accent);">Caregiver: Patient Profile & Memory</h2>
-              <span class="conv-caregiver-badge">Caregiver Editor (Keyboard & Mouse)</span>
+            <div class="conv-modal-header">
+              <h2 class="conv-modal-title">Patient Profile & Memory</h2>
+              <button class="conv-modal-close" data-action="close-profile">Close</button>
             </div>
-            <div class="conv-form-group">
-              <label>Patient Name</label>
-              <input type="text" id="prof-name" value="${escapeHtml(memory.name)}" />
+            <div>
+              <label class="conv-setting-label">Patient Name</label>
+              <input type="text" id="prof-name" class="conv-input" value="${escapeHtml(memory.name)}" />
             </div>
-            <div class="conv-form-group">
-              <label>Condition & Communication</label>
-              <input type="text" id="prof-condition" value="${escapeHtml(memory.condition)}" />
+            <div>
+              <label class="conv-setting-label">Condition & Needs</label>
+              <input type="text" id="prof-condition" class="conv-input" value="${escapeHtml(memory.condition)}" />
             </div>
-            <div class="conv-form-group">
-              <label>Family, Carers & Doctors</label>
-              <input type="text" id="prof-family" value="${escapeHtml(memory.familyNames)}" />
+            <div>
+              <label class="conv-setting-label">Family & Doctors</label>
+              <input type="text" id="prof-family" class="conv-input" value="${escapeHtml(memory.familyNames)}" />
             </div>
-            <div class="conv-form-group">
-              <label>Daily Meds & Schedule</label>
-              <input type="text" id="prof-meds" value="${escapeHtml(memory.meds)}" />
+            <div>
+              <label class="conv-setting-label">Daily Meds & Schedule</label>
+              <input type="text" id="prof-meds" class="conv-input" value="${escapeHtml(memory.meds)}" />
             </div>
-            <div class="conv-form-group">
-              <label>Personal Likes & Interests</label>
-              <input type="text" id="prof-likes" value="${escapeHtml(memory.likes)}" />
+            <div>
+              <label class="conv-setting-label">Personal Likes</label>
+              <input type="text" id="prof-likes" class="conv-input" value="${escapeHtml(memory.likes)}" />
             </div>
-            <div class="conv-form-group">
-              <label>Usual Physical Needs</label>
-              <input type="text" id="prof-needs" value="${escapeHtml(memory.usualNeeds)}" />
+            <div>
+              <label class="conv-setting-label">Clinical Notes</label>
+              <textarea id="prof-notes" class="conv-input" rows="2">${escapeHtml(memory.notes || '')}</textarea>
             </div>
-            <div class="conv-form-group">
-              <label>Clinical & Language Notes</label>
-              <textarea id="prof-notes" rows="2">${escapeHtml(memory.notes || '')}</textarea>
-            </div>
-            <div class="conv-modal-actions">
-              <button class="conv-btn-pill active" id="btn-save-profile">Save Changes</button>
-              <button class="conv-btn-pill" data-action="close-profile">Close</button>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+              <button class="conv-btn btn-primary" id="btn-save-profile">Save Changes</button>
+              <button class="conv-btn" data-action="close-profile">Close</button>
             </div>
           </div>
         </div>
@@ -1003,7 +955,7 @@ export function startConversation(app) {
             familyNames: app.querySelector('#prof-family').value,
             meds: app.querySelector('#prof-meds').value,
             likes: app.querySelector('#prof-likes').value,
-            usualNeeds: app.querySelector('#prof-needs').value,
+            usualNeeds: memory.usualNeeds,
             notes: app.querySelector('#prof-notes').value
           };
           saveMemory(memory);
@@ -1014,559 +966,399 @@ export function startConversation(app) {
       return;
     }
 
-    // 5. Top Bar (Heard Strip, Translation Subtitle, Caregiver Toolbar)
-    const topBarHtml = `
-      <header class="conv-topbar">
-        <div class="conv-heard-container">
-          <div class="conv-heard-label">
-            <span class="conv-mic-dot ${isListening ? 'active' : ''}"></span>
-            Heard:
-            <span class="conv-phone-badge" style="display:${heardFrom === 'phone' ? 'inline-flex' : 'none'}">📱 from phone</span>
-          </div>
-          <div class="conv-heard-text ${heardText ? '' : 'placeholder'}">
-            ${escapeHtml(heardText || (isListening ? 'Listening for speech...' : 'Microphone paused'))}
-          </div>
-          ${isLoadingReplies ? '<div class="conv-loading-pill">Thinking...</div>' : ''}
-        </div>
 
-        <div class="conv-caregiver-controls" title="Caregiver & Judge Controls (Mouse / Touch Only)">
-          <span class="conv-caregiver-label">Caregiver:</span>
-          <button class="conv-btn-pill ${isListening ? 'active' : ''}" data-action="toggle-mic">
-            🎤 ${isListening ? 'Mic On' : 'Mic Off'}
-          </button>
-          <button class="conv-btn-pill ${isJudgeMode ? 'active' : ''}" data-action="toggle-demo" title="Toggle Judge Demo Mode">
-            🎯 Demo
-          </button>
-          <button class="conv-btn-pill ${isHighContrast ? 'active' : ''}" data-action="toggle-contrast" title="High Contrast Mode">
-            🌓 Contrast
-          </button>
-          <button class="conv-btn-pill ${isLargeText ? 'active' : ''}" data-action="toggle-size" title="Bigger Text Toggle">
-            Aa Size
-          </button>
-          <button class="conv-btn-pill" data-action="toggle-listener-lang" title="Toggle Listener Voice Language">
-            🌐 ${escapeHtml(listenerObj.name)}
-          </button>
-          <button class="conv-btn-pill" data-action="toggle-input" title="Manual Text Box Fallback">
-            ⌨️ Text
-          </button>
-          <button class="conv-btn-pill" data-action="open-summary" title="Daily Medical Summary">
-            📊 Summary
-          </button>
-          <button class="conv-btn-pill" data-action="open-profile" title="Patient Profile & Meds">
-            ⚙️ ${escapeHtml(memory.name.split(' ')[0])}
-          </button>
-        </div>
-      </header>
 
-      ${
-        isJudgeMode
-          ? `
-        <div class="conv-judge-guide">
-          <div>
-            🎯 <strong>Judge Prompt:</strong> Ask <em>"Did you sleep well?"</em> (or type below) &rarr; hover a reply tile for 1.2s to speak!
-          </div>
-          <div style="font-size:0.9rem; opacity:0.85;">
-            Follow-up: <em>"Are you thirsty?"</em> &bull; Try <strong>🔤 Spell</strong> &bull; Hold <strong>🚨 EMERGENCY</strong>
-          </div>
-        </div>
-      `
-          : ''
-      }
-
-      ${
-        liveProof
-          ? `
-        <div class="conv-proof-banner">
-          <div>
-            ⚡ <strong>Live Proof:</strong> Letter-by-letter scanning would take <strong>${liveProof.scanningSelections} selections</strong> (~${liveProof.scanningSecs}s). Gaze Voice: <strong>1 glance in ${liveProof.gazeSecs}s</strong>!
-          </div>
-          <div class="conv-proof-badge">
-            ${liveProof.speedup}x FASTER
-          </div>
-        </div>
-      `
-          : ''
-      }
-
-      ${
-        lastTranslation
-          ? `
-        <div class="conv-translation-box">
-          <span class="conv-trans-label">Spoken in ${escapeHtml(listenerObj.name)}:</span>
-          <span class="conv-trans-text">"${escapeHtml(lastTranslation.translated)}"</span>
-          <span style="opacity:0.6; font-size:0.9rem;">(Original: "${escapeHtml(lastTranslation.original)}")</span>
-        </div>
-      `
-          : ''
-      }
-
-      ${
-        showManualInput
-          ? `
-        <div style="background:#131824; padding:8px 20px; display:flex; gap:10px; border-bottom:1px solid #263347;">
-          <input type="text" id="manual-utterance" placeholder="Type question for patient (fallback for noisy room)..." style="flex:1; background:#0b0e14; border:1px solid #263347; color:#fff; padding:8px 12px; border-radius:8px;" />
-          <button class="conv-btn-pill active" id="btn-submit-manual">Ask</button>
-        </div>
-      `
-          : ''
-      }
-    `;
-
-    // 6. Side Navigation Rail (All large gaze targets with fixed Emergency)
-    let navTilesHtml = '';
-
+    // ========================================================================
+    // MAIN SCREEN (mode === 'chat'): 3 BANDS
+    // ========================================================================
     if (mode === 'chat') {
-      navTilesHtml = `
-        ${
-          fatigueAlert
-            ? `
-          <button class="conv-tile conv-tile-nav conv-tile-fatigue" data-gaze-target data-action="fatigue-rest">
-            <span class="conv-tile-tag">Tired?</span>
-            <span class="conv-tile-text">😴 Take a break</span>
-            <div class="conv-tile-dwell-ring"></div>
+      const roles = ['agree', 'decline', 'need', 'feeling', 'ask_back', 'other'];
+
+      app.innerHTML = `
+        <!-- Top Bar (~56px): Heard Question + Quiet Caregiver Menu -->
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-row">
+              <span class="conv-heard-text ${heardText ? '' : 'placeholder'}">
+                ${escapeHtml(heardText || (isListening ? 'Listening...' : 'Microphone paused'))}
+              </span>
+              <span class="conv-phone-badge" style="display: ${heardFrom === 'phone' ? 'inline-block' : 'none'};">From phone</span>
+            </div>
+            ${isJudgeMode ? '<div class="conv-demo-prompt">Ask: "Did you sleep well?" · Hover any reply to speak</div>' : ''}
+          </div>
+          <button class="conv-menu-btn" data-action="open-caregiver-menu" aria-label="Caregiver Menu">
+            ${ICONS.menu} Menu
           </button>
-        `
-            : ''
-        }
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-topics" style="border-color:#ab47bc; background:rgba(171,71,188,0.12);">
-          <span class="conv-tile-tag">Initiate</span>
-          <span class="conv-tile-text">💬 I want to say</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
+        </header>
 
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-type">
-          <span class="conv-tile-tag">Keyboard</span>
-          <span class="conv-tile-text">⌨️ ${isHi ? 'लिखें' : 'Type'}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
+        <!-- Main Screen Body: Hero (65% height, 6 tiles) + Bottom Row (6 tiles) -->
+        <div class="conv-main-layout">
+          <!-- Hero Grid (3x2, neutral surface, 30px semibold text, no labels, no icons) -->
+          <div class="conv-hero-grid">
+            ${roles.map((role) => {
+              const isPinned = !!pinnedReplies[role];
+              const data = isPinned ? pinnedReplies[role] : roleReplies[role];
+              const text = data?.text || '';
+              return `
+                <div class="conv-reply-tile ${isPinned ? 'is-pinned' : ''}" id="slot-${role}" data-gaze-target data-action="reply" data-role="${role}" data-value="${escapeHtml(text)}">
+                  <span class="conv-reply-text">${escapeHtml(text)}</span>
+                  <button class="conv-pin-btn" data-action="toggle-pin" data-role="${role}" data-text="${escapeHtml(text)}" title="${isPinned ? 'Unpin' : 'Pin'}">
+                    ${ICONS.pin}
+                  </button>
+                  <div class="conv-tile-dwell-ring"></div>
+                </div>
+              `;
+            }).join('')}
+          </div>
 
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-categories">
-          <span class="conv-tile-tag">AAC Library</span>
-          <span class="conv-tile-text">📂 ${isHi ? 'श्रेणियाँ' : 'Categories'}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        <button class="conv-tile conv-tile-nav" data-gaze-target data-action="nav-pain" style="border-color:#ff5252; background:rgba(255,82,82,0.12);">
-          <span class="conv-tile-tag">Health</span>
-          <span class="conv-tile-text">🩺 ${isHi ? 'दर्द' : 'Pain'}</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-
-        ${
-          isAudioStopped
-            ? `
-          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-listen" style="border-color:#00e676; background:rgba(0,230,118,0.12);">
-            <span class="conv-tile-tag">Audio</span>
-            <span class="conv-tile-text">▶️ Listen</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        `
-            : `
-          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-stop" style="border-color:#ff9800; background:rgba(255,152,0,0.12);">
-            <span class="conv-tile-tag">Audio</span>
-            <span class="conv-tile-text">⏹️ Stop</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        `
-        }
+          <!-- Bottom Row (6 Equal Tiles: Yes, No, Wait, Keyboard, More, Emergency) -->
+          <div class="conv-bottom-row">
+            <button class="conv-action-tile tile-yes" data-gaze-target data-action="core-yes">
+              <span>${isHi ? 'हाँ' : 'Yes'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-action-tile tile-no" data-gaze-target data-action="core-no">
+              <span>${isHi ? 'नहीं' : 'No'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-action-tile" data-gaze-target data-action="core-wait">
+              <span>${isHi ? 'रुकिए' : 'Wait'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-action-tile" data-gaze-target data-action="nav-type">
+              ${ICONS.keyboard}
+              <span>${isHi ? 'कीबोर्ड' : 'Keyboard'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-action-tile" data-gaze-target data-action="open-more">
+              ${ICONS.more}
+              <span>${isHi ? 'अन्य' : 'More'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-action-tile tile-emergency conv-tile-emergency" data-gaze-target data-gaze-always="1" data-gaze-dwell="2000" data-action="emergency">
+              ${ICONS.emergency}
+              <span>${isHi ? 'आपातकाल' : 'Emergency'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+        </div>
       `;
-    } else if (mode === 'type' || mode === 'spell' || mode === 'pain' || mode === 'pain_scale' || mode === 'pain_exact') {
-      navTilesHtml = `
-        <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
-          <span class="conv-tile-tag">Return</span>
-          <span class="conv-tile-text">💬 Back to Chat</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
 
-        ${
-          isAudioStopped
-            ? `
-          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-listen" style="border-color:#00e676; background:rgba(0,230,118,0.12);">
-            <span class="conv-tile-tag">Audio</span>
-            <span class="conv-tile-text">▶️ Listen</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        `
-            : `
-          <button class="conv-tile conv-tile-nav" data-gaze-target data-action="audio-stop" style="border-color:#ff9800; background:rgba(255,152,0,0.12);">
-            <span class="conv-tile-tag">Audio</span>
-            <span class="conv-tile-text">⏹️ Stop</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        `
-        }
-      `;
-    } else {
-      // Topics, Categories, and sub-menus
-      navTilesHtml = `
-        <button class="conv-tile conv-tile-nav conv-tile-back" data-gaze-target data-action="nav-back">
-          <span class="conv-tile-tag">Navigation</span>
-          <span class="conv-tile-text">⬅️ Back to Chat</span>
-          <div class="conv-tile-dwell-ring"></div>
-        </button>
-      `;
+      chatMounted = true;
+      renderCaregiverMenuModal();
+      return;
     }
 
-    const sidebarHtml = `
-      <aside class="conv-sidebar">
-        <nav class="conv-nav-rail">
-          ${navTilesHtml}
-        </nav>
-        <div class="conv-emergency-container">
-          <button class="conv-tile conv-tile-emergency" data-gaze-target data-gaze-always="1" data-gaze-dwell="2000" data-action="emergency">
-            <span class="conv-tile-tag">Hold 2s</span>
-            <span class="conv-tile-text">🚨 EMERGENCY</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        </div>
-      </aside>
-    `;
+    // ========================================================================
+    // MORE PANEL (mode === 'more')
+    // ========================================================================
+    if (mode === 'more') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">More Options</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back to Chat</button>
+        </header>
 
-    // 7. Main Interactive Grid depending on Mode
-    let mainContentHtml = '';
-
-    if (mode === 'chat') {
-      const firstPinnedKey = Object.keys(pinnedReplies)[0];
-      const firstPinnedText = firstPinnedKey ? pinnedReplies[firstPinnedKey].text : '';
-
-      mainContentHtml = `
-        <div class="conv-board">
-          <!-- 1. Fixed Core Zone (Yes, No, Wait/Stop, Repeat Last) -->
-          <div class="conv-core-zone">
-            <button class="conv-tile conv-tile-core core-yes" data-gaze-target data-action="core-yes">
-              <span class="conv-tile-tag">Affirm</span>
-              <span class="conv-tile-text">${isHi ? '✅ हाँ' : '✅ Yes'}</span>
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-pain">
+              <span>Pain Map</span>
+              <span class="panel-tile-sub">8 body zones & 0-10 scale</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-tile-core core-no" data-gaze-target data-action="core-no">
-              <span class="conv-tile-tag">Refuse</span>
-              <span class="conv-tile-text">${isHi ? '❌ नहीं' : '❌ No'}</span>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-categories">
+              <span>Categories</span>
+              <span class="panel-tile-sub">Needs, feelings, people</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-tile-core core-wait" data-gaze-target data-action="core-wait">
-              <span class="conv-tile-tag">Hold On</span>
-              <span class="conv-tile-text">${isHi ? '⏳ रुकिए' : '⏳ Please wait'}</span>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-home">
+              <span>Home & Nurse</span>
+              <span class="panel-tile-sub">Lights, fan, call nurse</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-tile-core core-repeat" id="tile-repeat" data-gaze-target data-action="core-repeat" data-value="${escapeHtml(lastSpokenText)}">
-              <span class="conv-tile-tag">Repeat</span>
-              <span class="conv-tile-text">${escapeHtml(isHi ? '🔁 दोहराएं: ' + (lastSpokenText || '') : '🔁 Repeat: ' + (lastSpokenText || 'Nothing yet'))}</span>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-pinned">
+              <span>Pinned Phrases</span>
+              <span class="panel-tile-sub">${Object.keys(pinnedReplies).length} pinned</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-history">
+              <span>History</span>
+              <span class="panel-tile-sub">Recent spoken phrases</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-tone">
+              <span>Tone</span>
+              <span class="panel-tile-sub">Current: ${currentTone}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="toggle-audio">
+              <span>${isAudioStopped ? 'Start Listening' : 'Stop Listening'}</span>
+              <span class="panel-tile-sub">${isAudioStopped ? 'Mic currently paused' : 'Mic active'}</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="core-repeat" data-value="${escapeHtml(lastSpokenText)}">
+              <span>Repeat Last</span>
+              <span class="panel-tile-sub">"${escapeHtml(lastSpokenText || 'None')}"</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-topics">
+              <span>I Want to Say</span>
+              <span class="panel-tile-sub">Conversation topics</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-back">
+              <span>Back to Chat</span>
+              <span class="panel-tile-sub">Return to replies</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
           </div>
+        </div>
+      `;
+      renderCaregiverMenuModal();
+      return;
+    }
 
-          <!-- 2. Pinned Phrase & History Strip (Last 3 Spoken) -->
-          <div class="conv-aux-row">
-            <button class="conv-tile conv-tile-pinned" id="tile-pinned" data-gaze-target data-action="pinned-phrase" data-value="${escapeHtml(firstPinnedText)}" title="Pinned Phrase">
-              <span class="conv-tile-text">${firstPinnedText ? '📌 ' + escapeHtml(firstPinnedText) : '📌 (Pin phrases)'}</span>
+    // ========================================================================
+    // HOME & NURSE REQUESTS (mode === 'home_requests')
+    // ========================================================================
+    if (mode === 'home_requests') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Home & Nurse Requests</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            <button class="conv-panel-tile" data-gaze-target data-action="home-request" data-kind="lights" data-label="Lights On" data-text="Turn on the lights">
+              <span>Turn On Lights</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-tile-history" id="tile-hist-0" data-gaze-target data-action="history-repeat" data-value="${escapeHtml(spokenHistory[0] || '')}">
-              <span class="conv-tile-text">🕒 ${escapeHtml(spokenHistory[0] || '(Empty)')}</span>
+            <button class="conv-panel-tile" data-gaze-target data-action="home-request" data-kind="lights" data-label="Lights Off" data-text="Turn off the lights">
+              <span>Turn Off Lights</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-tile-history" id="tile-hist-1" data-gaze-target data-action="history-repeat" data-value="${escapeHtml(spokenHistory[1] || '')}">
-              <span class="conv-tile-text">🕒 ${escapeHtml(spokenHistory[1] || '(Empty)')}</span>
+            <button class="conv-panel-tile" data-gaze-target data-action="home-request" data-kind="fan" data-label="Fan On" data-text="Turn on the fan">
+              <span>Turn On Fan</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-tile-history" id="tile-hist-2" data-gaze-target data-action="history-repeat" data-value="${escapeHtml(spokenHistory[2] || '')}">
-              <span class="conv-tile-text">🕒 ${escapeHtml(spokenHistory[2] || '(Empty)')}</span>
+            <button class="conv-panel-tile" data-gaze-target data-action="home-request" data-kind="fan" data-label="Fan Off" data-text="Turn off the fan">
+              <span>Turn Off Fan</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-panel-tile" data-gaze-target data-action="home-request" data-kind="nurse" data-label="Call Nurse" data-text="Call Nurse immediately" style="border-color:#f59e0b;">
+              <span>Call Nurse</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-back">
+              <span>Back to Chat</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
           </div>
+        </div>
+      `;
+      return;
+    }
 
-          <!-- 3. Tone Selector Row (Gentle, Urgent, Joking, Formal) -->
-          <div class="conv-tone-row">
-            <button class="conv-tile conv-tile-tone ${currentTone === 'gentle' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="gentle" title="Gentle expression tone">
-              <span class="conv-tile-text">🌸 ${isHi ? 'कोमल' : 'Gentle'}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-            <button class="conv-tile conv-tile-tone ${currentTone === 'urgent' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="urgent" title="Urgent expression tone">
-              <span class="conv-tile-text">⚡ ${isHi ? 'ज़रूरी' : 'Urgent'}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-            <button class="conv-tile conv-tile-tone ${currentTone === 'joking' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="joking" title="Joking expression tone">
-              <span class="conv-tile-text">😄 ${isHi ? 'मज़ाकिया' : 'Joking'}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-            <button class="conv-tile conv-tile-tone ${currentTone === 'formal' ? 'is-active' : ''}" data-gaze-target data-action="set-tone" data-value="formal" title="Formal expression tone">
-              <span class="conv-tile-text">👔 ${isHi ? 'औपचारिक' : 'Formal'}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
+    // ========================================================================
+    // TONE PICKER (mode === 'tone_picker')
+    // ========================================================================
+    if (mode === 'tone_picker') {
+      const tones = [
+        { id: 'gentle', title: 'Gentle', desc: 'Warm, calm and soft-spoken' },
+        { id: 'urgent', title: 'Urgent', desc: 'Fast, direct and pressing' },
+        { id: 'joking', title: 'Joking', desc: 'Lighthearted and playful' },
+        { id: 'formal', title: 'Formal', desc: 'Polite and dignified' }
+      ];
+
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Expression Tone</div>
           </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
 
-          <!-- 4. Fixed Role Slots (Agree, Decline, Need, Feeling, Ask Back, Something Else) -->
-          <div class="conv-role-grid">
-            <!-- Slot 1: Agree -->
-            <div class="conv-tile conv-tile-role ${pinnedReplies.agree ? 'is-pinned' : ''}" id="slot-agree" data-gaze-target data-action="reply" data-role="agree" data-value="${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}">
-              <span class="conv-tile-tag">${pinnedReplies.agree ? '📌 PINNED' : escapeHtml(roleReplies.agree.tag)}</span>
-              <span class="conv-tile-text">${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}</span>
-              <button class="conv-pin-btn" data-action="toggle-pin" data-role="agree" data-text="${escapeHtml((pinnedReplies.agree || roleReplies.agree).text)}" data-tag="${escapeHtml(roleReplies.agree.tag)}" title="${pinnedReplies.agree ? 'Unpin' : 'Pin'}">${pinnedReplies.agree ? '📌' : '📍'}</button>
-              <div class="conv-tile-dwell-ring"></div>
-            </div>
-
-            <!-- Slot 2: Decline -->
-            <div class="conv-tile conv-tile-role ${pinnedReplies.decline ? 'is-pinned' : ''}" id="slot-decline" data-gaze-target data-action="reply" data-role="decline" data-value="${escapeHtml((pinnedReplies.decline || roleReplies.decline).text)}">
-              <span class="conv-tile-tag">${pinnedReplies.decline ? '📌 PINNED' : escapeHtml(roleReplies.decline.tag)}</span>
-              <span class="conv-tile-text">${escapeHtml((pinnedReplies.decline || roleReplies.decline).text)}</span>
-              <button class="conv-pin-btn" data-action="toggle-pin" data-role="decline" data-text="${escapeHtml((pinnedReplies.decline || roleReplies.decline).text)}" data-tag="${escapeHtml(roleReplies.decline.tag)}" title="${pinnedReplies.decline ? 'Unpin' : 'Pin'}">${pinnedReplies.decline ? '📌' : '📍'}</button>
-              <div class="conv-tile-dwell-ring"></div>
-            </div>
-
-            <!-- Slot 3: Need -->
-            <div class="conv-tile conv-tile-role ${pinnedReplies.need ? 'is-pinned' : ''}" id="slot-need" data-gaze-target data-action="reply" data-role="need" data-value="${escapeHtml((pinnedReplies.need || roleReplies.need).text)}">
-              <span class="conv-tile-tag">${pinnedReplies.need ? '📌 PINNED' : escapeHtml(roleReplies.need.tag)}</span>
-              <span class="conv-tile-text">${escapeHtml((pinnedReplies.need || roleReplies.need).text)}</span>
-              <button class="conv-pin-btn" data-action="toggle-pin" data-role="need" data-text="${escapeHtml((pinnedReplies.need || roleReplies.need).text)}" data-tag="${escapeHtml(roleReplies.need.tag)}" title="${pinnedReplies.need ? 'Unpin' : 'Pin'}">${pinnedReplies.need ? '📌' : '📍'}</button>
-              <div class="conv-tile-dwell-ring"></div>
-            </div>
-
-            <!-- Slot 4: Feeling -->
-            <div class="conv-tile conv-tile-role ${pinnedReplies.feeling ? 'is-pinned' : ''}" id="slot-feeling" data-gaze-target data-action="reply" data-role="feeling" data-value="${escapeHtml((pinnedReplies.feeling || roleReplies.feeling).text)}">
-              <span class="conv-tile-tag">${pinnedReplies.feeling ? '📌 PINNED' : escapeHtml(roleReplies.feeling.tag)}</span>
-              <span class="conv-tile-text">${escapeHtml((pinnedReplies.feeling || roleReplies.feeling).text)}</span>
-              <button class="conv-pin-btn" data-action="toggle-pin" data-role="feeling" data-text="${escapeHtml((pinnedReplies.feeling || roleReplies.feeling).text)}" data-tag="${escapeHtml(roleReplies.feeling.tag)}" title="${pinnedReplies.feeling ? 'Unpin' : 'Pin'}">${pinnedReplies.feeling ? '📌' : '📍'}</button>
-              <div class="conv-tile-dwell-ring"></div>
-            </div>
-
-            <!-- Slot 5: Ask Back -->
-            <div class="conv-tile conv-tile-role ${pinnedReplies.ask_back ? 'is-pinned' : ''}" id="slot-ask_back" data-gaze-target data-action="reply" data-role="ask_back" data-value="${escapeHtml((pinnedReplies.ask_back || roleReplies.ask_back).text)}">
-              <span class="conv-tile-tag">${pinnedReplies.ask_back ? '📌 PINNED' : escapeHtml(roleReplies.ask_back.tag)}</span>
-              <span class="conv-tile-text">${escapeHtml((pinnedReplies.ask_back || roleReplies.ask_back).text)}</span>
-              <button class="conv-pin-btn" data-action="toggle-pin" data-role="ask_back" data-text="${escapeHtml((pinnedReplies.ask_back || roleReplies.ask_back).text)}" data-tag="${escapeHtml(roleReplies.ask_back.tag)}" title="${pinnedReplies.ask_back ? 'Unpin' : 'Pin'}">${pinnedReplies.ask_back ? '📌' : '📍'}</button>
-              <div class="conv-tile-dwell-ring"></div>
-            </div>
-
-            <!-- Slot 6: Something Else (Opens Keyboard) -->
-            <div class="conv-tile conv-tile-role" id="slot-other" data-gaze-target data-action="nav-type" style="border-color:var(--conv-accent); background:rgba(0,229,255,0.08);">
-              <span class="conv-tile-tag">${isHi ? 'कीबोर्ड' : 'Keyboard'}</span>
-              <span class="conv-tile-text">${isHi ? '⌨️ कुछ और लिखें' : '⌨️ Something else'}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </div>
-          </div>
-        </div>
-      `;
-    } else if (mode === 'topics') {
-      // Patient Starts Conversations: Topic Tiles
-      mainContentHtml = `
-        <div class="conv-grid-container">
-          ${TOPICS.map(
-            (t) => `
-            <button class="conv-tile" data-gaze-target data-action="topic-select" data-value="${t.id}">
-              <span class="conv-tile-tag">${t.tag}</span>
-              <span class="conv-tile-text">${t.icon} ${t.label}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-          `
-          ).join('')}
-          <button class="conv-tile" data-gaze-target data-action="nav-back">
-            <span class="conv-tile-tag">Chat</span>
-            <span class="conv-tile-text">💬 Back to Live Chat</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        </div>
-      `;
-    } else if (mode === 'topic_items') {
-      // Sub-items for selected topic
-      const topic = activeTopic || TOPICS[0];
-      mainContentHtml = `
-        <div class="conv-grid-container">
-          ${topic.tiles.map(
-            (item) => `
-            <button class="conv-tile" data-gaze-target data-action="topic-item-select" data-value='${escapeHtml(JSON.stringify(item))}'>
-              <span class="conv-tile-tag">${item.tag}</span>
-              <span class="conv-tile-text">${escapeHtml(item.text)}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-          `
-          ).join('')}
-        </div>
-      `;
-    } else if (mode === 'categories') {
-      // Fixed Categories Tiles
-      mainContentHtml = `
-        <div class="conv-grid-container">
-          ${CATEGORIES.map(
-            (c) => `
-            <button class="conv-tile" data-gaze-target data-action="category-select" data-value="${c.id}">
-              <span class="conv-tile-tag">${c.tag}</span>
-              <span class="conv-tile-text">${c.icon} ${isHi ? c.labelHi : c.label}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-          `
-          ).join('')}
-          <button class="conv-tile" data-gaze-target data-action="nav-back">
-            <span class="conv-tile-tag">Chat</span>
-            <span class="conv-tile-text">💬 Back to Live Chat</span>
-            <div class="conv-tile-dwell-ring"></div>
-          </button>
-        </div>
-      `;
-    } else if (mode === 'category_items') {
-      // Sub-tiles under selected category
-      const currentCat = activeCategory || CATEGORIES[0];
-      const phrases = (isHi ? currentCat.phrases['hi-IN'] : currentCat.phrases['en-IN']) || [];
-      mainContentHtml = `
-        <div class="conv-grid-container">
-          ${phrases.slice(0, 6).map(
-            (p) => `
-            <button class="conv-tile" data-gaze-target data-action="reply" data-value="${escapeHtml(p)}">
-              <span class="conv-tile-tag">${currentCat.tag}</span>
-              <span class="conv-tile-text">${escapeHtml(p)}</span>
-              <div class="conv-tile-dwell-ring"></div>
-            </button>
-          `
-          ).join('')}
-        </div>
-      `;
-    } else if (mode === 'type' || mode === 'spell') {
-      mainContentHtml = `
-        <div class="conv-keyboard-container">
-          <div class="conv-type-bar">
-            <div class="conv-type-buffer">
-              ${typeBuffer ? escapeHtml(typeBuffer) : '<span style="opacity:0.4; font-weight:500;">Type by glancing at letters...</span>'}<span class="conv-spell-cursor"></span>
-            </div>
-            <div style="font-size:0.9rem; color:var(--conv-text-muted); padding-left:12px;">
-              ${typeBuffer.length} chars
-            </div>
-          </div>
-
-          <div class="conv-type-predictions">
-            ${typePredictions.slice(0, 5).map(
-              (word) => `
-              <button class="conv-tile conv-pred-tile" data-gaze-target data-action="type-prediction" data-value="${escapeHtml(word)}">
-                <span class="conv-tile-text">✨ ${escapeHtml(word)}</span>
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid" style="grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr);">
+            ${tones.map((t) => `
+              <button class="conv-panel-tile ${currentTone === t.id ? 'is-active' : ''}" data-gaze-target data-action="select-tone" data-value="${t.id}">
+                <span>${t.title}</span>
+                <span class="panel-tile-sub">${t.desc}</span>
                 <div class="conv-tile-dwell-ring"></div>
               </button>
-            `
-            ).join('')}
+            `).join('')}
           </div>
+        </div>
+      `;
+      return;
+    }
 
-          <div class="conv-qwerty-grid">
-            <!-- Row 1: Q W E R T Y U I O P -->
-            <div class="conv-qwerty-row">
-              ${['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'].map(
-                (k) => `
-                <button class="conv-tile conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
-                  <span class="conv-tile-text">${k}</span>
+    // ========================================================================
+    // PINNED PHRASES (mode === 'pinned_list')
+    // ========================================================================
+    if (mode === 'pinned_list') {
+      const pins = Object.entries(pinnedReplies);
+
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Pinned Phrases</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            ${
+              pins.length > 0
+                ? pins.map(([role, item]) => `
+                <button class="conv-panel-tile" data-gaze-target data-action="reply" data-value="${escapeHtml(item.text)}">
+                  <span>"${escapeHtml(item.text)}"</span>
+                  <span class="panel-tile-sub">Pinned (${role})</span>
                   <div class="conv-tile-dwell-ring"></div>
                 </button>
-              `
-              ).join('')}
-            </div>
-
-            <!-- Row 2: A S D F G H J K L -->
-            <div class="conv-qwerty-row">
-              ${['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'].map(
-                (k) => `
-                <button class="conv-tile conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
-                  <span class="conv-tile-text">${k}</span>
-                  <div class="conv-tile-dwell-ring"></div>
-                </button>
-              `
-              ).join('')}
-            </div>
-
-            <!-- Row 3: Z X C V B N M + Backspace -->
-            <div class="conv-qwerty-row">
-              ${['Z', 'X', 'C', 'V', 'B', 'N', 'M'].map(
-                (k) => `
-                <button class="conv-tile conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
-                  <span class="conv-tile-text">${k}</span>
-                  <div class="conv-tile-dwell-ring"></div>
-                </button>
-              `
-              ).join('')}
-              <button class="conv-tile conv-key-tile key-wide-2" data-gaze-target data-action="type-backspace">
-                <span class="conv-tile-text">⌫ Back</span>
-                <div class="conv-tile-dwell-ring"></div>
-              </button>
-            </div>
-
-            <!-- Row 4: Clear, Space, Speak, WhatsApp -->
-            <div class="conv-qwerty-row">
-              <button class="conv-tile conv-key-tile key-wide-2 key-action-clear" data-gaze-target data-action="type-clear">
-                <span class="conv-tile-text">✕ Clear</span>
-                <div class="conv-tile-dwell-ring"></div>
-              </button>
-              <button class="conv-tile conv-key-tile key-wide-4" data-gaze-target data-action="type-space">
-                <span class="conv-tile-text">␣ Space</span>
-                <div class="conv-tile-dwell-ring"></div>
-              </button>
-              <button class="conv-tile conv-key-tile key-wide-3 key-action-speak" data-gaze-target data-action="type-speak">
-                <span class="conv-tile-text">🔊 Speak</span>
-                <div class="conv-tile-dwell-ring"></div>
-              </button>
-              <button class="conv-tile conv-key-tile key-wide-15" data-gaze-target data-action="type-whatsapp" style="border-color:#25d366; background:rgba(37,211,102,0.12);" title="Send via WhatsApp">
-                <span class="conv-tile-text">💬 WA</span>
-                <div class="conv-tile-dwell-ring"></div>
-              </button>
-            </div>
+              `).join('')
+                : '<div style="grid-column: span 5; padding: 40px; text-align: center; color: var(--conv-text-muted);">No pinned phrases yet. Hover a reply card to pin it.</div>'
+            }
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-back">
+              <span>Back to Chat</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
           </div>
         </div>
       `;
-    } else if (mode === 'pain') {
-      mainContentHtml = `
-        <div class="conv-pain-board">
-          <div class="conv-pain-header">
-            <span>🩺 ${isHi ? 'दर्द का स्थान चुनें (सामने का दृश्य - 8 मुख्य भाग)' : 'Where does it hurt? Glance at a body zone (Front View)'}</span>
-            <span style="font-size:0.9rem; opacity:0.85;">8 Gaze Zones</span>
+      return;
+    }
+
+    // ========================================================================
+    // HISTORY LIST (mode === 'history_list')
+    // ========================================================================
+    if (mode === 'history_list') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Spoken History</div>
           </div>
-          <div class="conv-pain-grid">
-            ${PAIN_ZONES.map(
-              (z) => `
-              <button class="conv-tile conv-pain-tile" data-gaze-target data-action="pain-zone-select" data-value="${z.id}">
-                <span class="conv-pain-icon">${z.icon}</span>
-                <span class="conv-pain-label">${isHi ? z.labelHi : z.label}</span>
-                <span class="conv-pain-sub">${z.desc}</span>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            ${spokenHistory.map((phrase) => `
+              <button class="conv-panel-tile" data-gaze-target data-action="reply" data-value="${escapeHtml(phrase)}">
+                <span>"${escapeHtml(phrase)}"</span>
+                <span class="panel-tile-sub">Speak again</span>
                 <div class="conv-tile-dwell-ring"></div>
               </button>
-            `
-            ).join('')}
+            `).join('')}
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-back">
+              <span>Back to Chat</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
           </div>
         </div>
       `;
-    } else if (mode === 'pain_scale') {
+      return;
+    }
+
+    // ========================================================================
+    // PAIN MAP (mode === 'pain')
+    // ========================================================================
+    if (mode === 'pain') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Pain Map — Select Body Zone</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-pain-grid-4x2 conv-pain-board">
+            ${PAIN_ZONES.map((z) => `
+              <button class="conv-pain-tile" data-gaze-target data-action="pain-zone-select" data-value="${z.id}">
+                <span class="conv-pain-name conv-pain-label">${isHi ? z.labelHi : z.label}</span>
+                <span class="conv-pain-desc">${z.desc}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // ========================================================================
+    // PAIN SCALE (mode === 'pain_scale')
+    // ========================================================================
+    if (mode === 'pain_scale') {
       const zone = selectedPainZone || PAIN_ZONES[2];
-      mainContentHtml = `
-        <div class="conv-pain-scale-container">
-          <div class="conv-pain-header">
-            <span>🩺 ${zone.icon} ${isHi ? (zone.labelHi || zone.label) : zone.label} Pain — ${isHi ? 'तीव्रता चुनें (0-10)' : 'Select Severity (0-10 Scale)'}</span>
-            <span style="font-size:0.9rem; opacity:0.85;">Glance to Speak & Alert</span>
+
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">${zone.label} Pain — Select Severity</div>
           </div>
-          <div class="conv-pain-scale-grid">
-            <button class="conv-tile conv-pain-scale-tile scale-mild" data-gaze-target data-action="pain-confirm" data-level="mild" data-score="2">
+          <button class="conv-menu-btn" data-action="nav-pain">Change Zone</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-pain-scale-3 conv-pain-scale-container">
+            <button class="conv-scale-tile conv-pain-scale-tile scale-mild" data-gaze-target data-action="pain-confirm" data-level="mild" data-score="2">
               <span class="conv-scale-score">2</span>
-              <span class="conv-scale-title">🟢 ${isHi ? 'हल्का' : 'Mild (1-3)'}</span>
-              <span class="conv-scale-sub">${isHi ? 'सहन करने योग्य' : 'Tolerable discomfort'}</span>
+              <span class="conv-scale-name conv-scale-title">Mild (1–3)</span>
+              <span class="conv-scale-info">Tolerable discomfort</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-pain-scale-tile scale-moderate" data-gaze-target data-action="pain-confirm" data-level="moderate" data-score="5">
+
+            <button class="conv-scale-tile conv-pain-scale-tile scale-moderate" data-gaze-target data-action="pain-confirm" data-level="moderate" data-score="5">
               <span class="conv-scale-score">5</span>
-              <span class="conv-scale-title">🟡 ${isHi ? 'मध्यम' : 'Moderate (4-6)'}</span>
-              <span class="conv-scale-sub">${isHi ? 'कष्टदायक' : 'Noticeable pain'}</span>
+              <span class="conv-scale-name conv-scale-title">Moderate (4–6)</span>
+              <span class="conv-scale-info">Noticeable pain</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile conv-pain-scale-tile scale-severe" data-gaze-target data-action="pain-confirm" data-level="severe" data-score="8">
+
+            <button class="conv-scale-tile conv-pain-scale-tile scale-severe" data-gaze-target data-action="pain-confirm" data-level="severe" data-score="8">
               <span class="conv-scale-score">8</span>
-              <span class="conv-scale-title">🔴 ${isHi ? 'बहुत तेज' : 'Severe (7-10)'}</span>
-              <span class="conv-scale-sub">${isHi ? 'केयरगिवर फ़ोन अलर्ट' : 'Alerts Caregiver Phone 📱'}</span>
+              <span class="conv-scale-name conv-scale-title">Severe (7–10)</span>
+              <span class="conv-scale-info">Alerts caregiver phone</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
           </div>
-          <div style="display:flex; gap:12px; height:54px;">
-            <button class="conv-tile" data-gaze-target data-action="pain-to-exact" style="flex:1; border-color:#ab47bc; background:rgba(171,71,188,0.12);">
-              <span class="conv-tile-text">🔢 ${isHi ? 'सटीक नंबर चुनें (0-10)' : 'Exact Number (0-10)'}</span>
+
+          <div style="display:flex; gap:12px; height:56px;">
+            <button class="conv-panel-tile" data-gaze-target data-action="pain-to-exact" style="flex:1;">
+              <span>Exact Number (0–10)</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
-            <button class="conv-tile" data-gaze-target data-action="nav-pain" style="flex:1;">
-              <span class="conv-tile-text">⬅️ ${isHi ? 'दूसरा अंग चुनें' : 'Change Body Zone'}</span>
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-pain" style="flex:1;">
+              <span>Change Body Zone</span>
               <div class="conv-tile-dwell-ring"></div>
             </button>
           </div>
         </div>
       `;
-    } else if (mode === 'pain_exact') {
+      return;
+    }
+
+    // ========================================================================
+    // PAIN EXACT (mode === 'pain_exact')
+    // ========================================================================
+    if (mode === 'pain_exact') {
       const zone = selectedPainZone || PAIN_ZONES[2];
       const numbers = [
         { score: 0, level: 'none', label: '0 None' },
@@ -1576,36 +1368,37 @@ export function startConversation(app) {
         { score: 4, level: 'moderate', label: '4 Mod' },
         { score: 5, level: 'moderate', label: '5 Mod' },
         { score: 6, level: 'moderate', label: '6 Mod' },
-        { score: 7, level: 'severe', label: '7 Severe ⚡' },
-        { score: 8, level: 'severe', label: '8 Severe ⚡' },
-        { score: 9, level: 'severe', label: '9 Critical 🚨' },
-        { score: 10, level: 'severe', label: '10 Extreme 🚨' },
-        { score: 'back', level: 'back', label: '⬅️ Back' }
+        { score: 7, level: 'severe', label: '7 Severe' },
+        { score: 8, level: 'severe', label: '8 Severe' },
+        { score: 9, level: 'severe', label: '9 Critical' },
+        { score: 10, level: 'severe', label: '10 Extreme' },
+        { score: 'back', level: 'back', label: 'Back' }
       ];
 
-      mainContentHtml = `
-        <div class="conv-pain-board">
-          <div class="conv-pain-header">
-            <span>🩺 ${zone.icon} ${isHi ? (zone.labelHi || zone.label) : zone.label} — ${isHi ? 'सटीक संख्या (0-10)' : 'Pick Exact Pain Score (0–10)'}</span>
-            <span style="font-size:0.9rem; opacity:0.85;">Scores 7-10 Alert Phone</span>
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">${zone.label} — Pick Exact Score</div>
           </div>
-          <div class="conv-pain-exact-grid">
+          <button class="conv-menu-btn" data-action="nav-pain">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid" style="grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(2, 1fr);">
             ${numbers.map((item) => {
               if (item.score === 'back') {
                 return `
-                  <button class="conv-tile conv-pain-exact-tile" data-gaze-target data-action="nav-pain" style="background:#171d2b;">
-                    <span class="conv-tile-text">⬅️ Back</span>
+                  <button class="conv-panel-tile" data-gaze-target data-action="nav-pain">
+                    <span>Back</span>
                     <div class="conv-tile-dwell-ring"></div>
                   </button>
                 `;
               }
               const isSevere = item.score >= 7;
-              const borderClr = item.score === 0 ? '#4caf50' : item.score <= 3 ? '#00e676' : item.score <= 6 ? '#ffc107' : '#ff1744';
-              const bgClr = item.score >= 7 ? 'rgba(255,23,68,0.18)' : 'rgba(255,255,255,0.05)';
               return `
-                <button class="conv-tile conv-pain-exact-tile" data-gaze-target data-action="pain-confirm" data-score="${item.score}" data-level="${item.level}" style="border-color:${borderClr}; background:${bgClr};">
-                  <span class="conv-tile-text">${item.score}</span>
-                  <span class="exact-sub">${item.label}</span>
+                <button class="conv-panel-tile ${isSevere ? 'tile-emergency' : ''}" data-gaze-target data-action="pain-confirm" data-score="${item.score}" data-level="${item.level}">
+                  <span style="font-size:26px;">${item.score}</span>
+                  <span class="panel-tile-sub">${item.label}</span>
                   <div class="conv-tile-dwell-ring"></div>
                 </button>
               `;
@@ -1613,21 +1406,223 @@ export function startConversation(app) {
           </div>
         </div>
       `;
+      return;
     }
 
-    app.innerHTML = `
-      ${topBarHtml}
-      <div class="conv-main-view">
-        ${sidebarHtml}
-        ${mainContentHtml}
-      </div>
-    `;
+    // ========================================================================
+    // CATEGORIES (mode === 'categories')
+    // ========================================================================
+    if (mode === 'categories') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Category Library</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
 
-    if (mode === 'chat') {
-      chatMounted = true;
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            ${CATEGORIES.map((c) => `
+              <button class="conv-panel-tile" data-gaze-target data-action="category-select" data-value="${c.id}">
+                <span>${isHi ? c.labelHi : c.label}</span>
+                <span class="panel-tile-sub">${c.tag}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `).join('')}
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-back">
+              <span>Back to Chat</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
     }
 
-    // Hook manual text input if present
+    // ========================================================================
+    // CATEGORY ITEMS (mode === 'category_items')
+    // ========================================================================
+    if (mode === 'category_items') {
+      const currentCat = activeCategory || CATEGORIES[0];
+      const phrases = (isHi ? currentCat.phrases['hi-IN'] : currentCat.phrases['en-IN']) || [];
+
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">${currentCat.label} Phrases</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-categories">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            ${phrases.slice(0, 6).map((p) => `
+              <button class="conv-panel-tile" data-gaze-target data-action="reply" data-value="${escapeHtml(p)}">
+                <span>${escapeHtml(p)}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // ========================================================================
+    // TOPICS (mode === 'topics')
+    // ========================================================================
+    if (mode === 'topics') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Conversation Starters</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            ${TOPICS.map((t) => `
+              <button class="conv-panel-tile" data-gaze-target data-action="topic-select" data-value="${t.id}">
+                <span>${t.label}</span>
+                <span class="panel-tile-sub">${t.tag}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `).join('')}
+            <button class="conv-panel-tile" data-gaze-target data-action="nav-back">
+              <span>Back to Chat</span>
+              <div class="conv-tile-dwell-ring"></div>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // ========================================================================
+    // TOPIC ITEMS (mode === 'topic_items')
+    // ========================================================================
+    if (mode === 'topic_items') {
+      const topic = activeTopic || TOPICS[0];
+
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">${topic.label}</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-topics">Back</button>
+        </header>
+
+        <div class="conv-panel-view">
+          <div class="conv-panel-grid">
+            ${topic.tiles.map((item) => `
+              <button class="conv-panel-tile" data-gaze-target data-action="topic-item-select" data-value='${escapeHtml(JSON.stringify(item))}'>
+                <span>${escapeHtml(item.text)}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // ========================================================================
+    // KEYBOARD VIEW (mode === 'type')
+    // ========================================================================
+    if (mode === 'type') {
+      app.innerHTML = `
+        <header class="conv-topbar">
+          <div class="conv-heard-area">
+            <div class="conv-heard-text">Keyboard</div>
+          </div>
+          <button class="conv-menu-btn" data-action="nav-back">Back to Chat</button>
+        </header>
+
+        <div class="conv-keyboard-view">
+          <div class="conv-type-strip">
+            <div class="conv-type-buffer">
+              ${typeBuffer ? escapeHtml(typeBuffer) : '<span style="color:var(--conv-text-muted);">Glance at letters to compose...</span>'}
+            </div>
+            <div style="font-size:14px; color:var(--conv-text-muted);">
+              ${typeBuffer.length} chars
+            </div>
+          </div>
+
+          <div class="conv-type-preds">
+            ${typePredictions.slice(0, 5).map((word) => `
+              <button class="conv-pred-btn" data-gaze-target data-action="type-prediction" data-value="${escapeHtml(word)}">
+                <span>${escapeHtml(word)}</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            `).join('')}
+          </div>
+
+          <div class="conv-qwerty-box">
+            <!-- Row 1 -->
+            <div class="conv-qwerty-row">
+              ${['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'].map((k) => `
+                <button class="conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
+                  <span>${k}</span>
+                  <div class="conv-tile-dwell-ring"></div>
+                </button>
+              `).join('')}
+            </div>
+
+            <!-- Row 2 -->
+            <div class="conv-qwerty-row">
+              ${['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'].map((k) => `
+                <button class="conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
+                  <span>${k}</span>
+                  <div class="conv-tile-dwell-ring"></div>
+                </button>
+              `).join('')}
+            </div>
+
+            <!-- Row 3 -->
+            <div class="conv-qwerty-row">
+              ${['Z', 'X', 'C', 'V', 'B', 'N', 'M'].map((k) => `
+                <button class="conv-key-tile" data-gaze-target data-action="type-key" data-value="${k}">
+                  <span>${k}</span>
+                  <div class="conv-tile-dwell-ring"></div>
+                </button>
+              `).join('')}
+              <button class="conv-key-tile key-wide-2" data-gaze-target data-action="type-backspace">
+                <span>Delete</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            </div>
+
+            <!-- Row 4 -->
+            <div class="conv-qwerty-row">
+              <button class="conv-key-tile key-wide-2" data-gaze-target data-action="type-clear">
+                <span>Clear</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+              <button class="conv-key-tile key-wide-4" data-gaze-target data-action="type-space">
+                <span>Space</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+              <button class="conv-key-tile key-wide-3 key-action-speak" data-gaze-target data-action="type-speak">
+                <span>Speak</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+              <button class="conv-key-tile key-wide-2" data-gaze-target data-action="nav-back">
+                <span>Back</span>
+                <div class="conv-tile-dwell-ring"></div>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    hookManualInput();
+  }
+
+  function hookManualInput() {
     const btnSubmit = app.querySelector('#btn-submit-manual');
     const inputManual = app.querySelector('#manual-utterance');
     if (btnSubmit && inputManual) {
@@ -1638,7 +1633,7 @@ export function startConversation(app) {
           heardFrom = 'mic';
           history.push({ speaker: 'other', text });
           handleNewUtterance(text, 'mic');
-          showManualInput = false;
+          showCaregiverMenu = false;
         }
       };
       btnSubmit.onclick = submit;
@@ -1658,6 +1653,5 @@ export function startConversation(app) {
       .replace(/'/g, '&#39;');
   }
 
-  // Initial render
   render();
 }
