@@ -36,8 +36,8 @@ export function createGate({ lockMs = LOCK_MS, speedMax = SPEED_MAX } = {}) {
   };
 }
 
-export function createInteraction({ dwellMs = () => 1200, refractoryMs = () => REFRACTORY_MS, lockMs, speedMax } = {}) {
-  const targeter = createTargeter();
+export function createInteraction({ dwellMs = () => 1200, refractoryMs = () => REFRACTORY_MS, lockMs, speedMax, targeter: targeterOpts } = {}) {
+  const targeter = createTargeter(targeterOpts);
   const dwell = createDwell();
   const gate = createGate({ lockMs, speedMax });
   let lastAt = -Infinity; let lockedEl = null;

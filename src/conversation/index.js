@@ -795,7 +795,7 @@ export function startConversation(app) {
     });
 
     // Update audio button in sidebar
-    const audioBtn = app.querySelector('.conv-tile-audio');
+    const audioBtn = app.querySelector('[data-action="audio-stop"], [data-action="audio-listen"]');
     if (audioBtn) {
       if (isAudioStopped) {
         audioBtn.dataset.action = 'audio-listen';
