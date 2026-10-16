@@ -5,6 +5,7 @@ import { createPointSmoother, PRESETS } from './smoothing.js';
 import { createTargeter, createDwell } from './select.js';
 import { createBlinkDetector } from './blink.js';
 import { createStats } from './stats.js';
+import { createFatigue } from './fatigue.js';
 
 const DEFAULT_DWELL_MS = 1200;
 
@@ -34,6 +35,10 @@ export function startGaze({ mode = 'mouse', root }) {
   ui.appendChild(sw);
 
   const stats = createStats({ root });
+  const fatigue = createFatigue({ root });
+  window.__gazeFatigue = fatigue; // demo: __gazeFatigue.force('mild')
+  setInterval(() => stats.update(fatigue.stats()), 1000);
+  let learner = null; // camera tracker's learn(x, y), set once tracking starts
   const statsBtn = document.createElement('button');
   statsBtn.textContent = 'Stats';
   statsBtn.onclick = () => stats.toggle();
@@ -101,7 +106,7 @@ export function startGaze({ mode = 'mouse', root }) {
     load.then((createTracker) => {
       const tracker = createTracker({
         onPoint: setRaw,
-        onBlink: (l, r, t) => { if (blinkBox.checked) blink.update(l, r, t); },
+        onBlink: (l, r, t) => { fatigue.blink(l, r); if (blinkBox.checked) blink.update(l, r, t); },
         onStatus: (s) => {
           showStatus(s, s === 'tracking' ? 'ok' : 'bad');
           // no face: park the pointer off-screen so dwell can't fire on a frozen point
@@ -109,6 +114,7 @@ export function startGaze({ mode = 'mouse', root }) {
         },
       });
       return tracker.start().then(() => {
+        learner = tracker.learn ? tracker.learn.bind(tracker) : null;
         const recal = document.createElement('button');
         recal.id = 'gaze-recal';
         recal.textContent = 'Recalibrate';
@@ -138,9 +144,19 @@ export function startGaze({ mode = 'mouse', root }) {
   const targeter = createTargeter();
   const dwell = createDwell();
   let hovered = null;
+  let hoverEl = null;
+  let hoverStart = 0;
+  const breakTile = document.getElementById('gaze-break');
 
   // Fire the contract's selection on el. The user must look away and back to select again.
   function selectNow(el) {
+    // every confirmed selection is a calibration sample + one point on the accuracy sparkline
+    if (!calibrating && !(mode === 'mouse' && !jitter) && point.x >= 0 && !el.hasAttribute('data-no-learn')) {
+      const b = el.getBoundingClientRect();
+      const cx = (b.left + b.right) / 2; const cy = (b.top + b.bottom) / 2;
+      stats.addError(Math.hypot(point.x - cx, point.y - cy));
+      if (learner && el !== breakTile) learner(cx, cy);
+    }
     el.dispatchEvent(new CustomEvent('gaze-select', { bubbles: true }));
     el.classList.remove('gaze-hover');
     el.style.setProperty('--dwell', 0);
@@ -172,14 +188,15 @@ export function startGaze({ mode = 'mouse', root }) {
       }
     }
 
-    const r = dwell.update(target, now, (el) => Number(el.dataset.gazeDwell));
+    const r = dwell.update(target, now, (el) => (el.dataset.gazeDwell ? Number(el.dataset.gazeDwell) : 1200 * fatigue.dwellScale));
+    if (r.el !== hoverEl) { hoverEl = r.el; hoverStart = now; }
     if (hovered && hovered !== r.el) { hovered.classList.remove('gaze-hover'); hovered.style.setProperty('--dwell', 0); hovered = null; }
     if (r.el) {
       hovered = r.el;
       r.el.classList.add('gaze-hover');
       r.el.style.setProperty('--dwell', r.progress);
     }
-    if (r.fired) selectNow(r.fired);
+    if (r.fired) { fatigue.selected(now - hoverStart); selectNow(r.fired); }
 
     // cursor: centre of the snapped target for camera modes, else the pointer itself
     const c = !plainMouse && target ? targeter.center(target, rects) : null;

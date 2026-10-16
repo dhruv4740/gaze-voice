@@ -22,6 +22,13 @@ The two halves only talk through [docs/CONTRACT.md](docs/CONTRACT.md).
 
 More: [docs/PLAN.md](docs/PLAN.md) · [docs/INSTRUCTIONS.md](docs/INSTRUCTIONS.md)
 
+## It learns while you use it
+Every confirmed selection becomes a calibration sample (median raw features of the last 400 ms
+paired with the target centre) and the head/iris/eyes models refit every few selections. The
+stats panel shows pointer error per selection as a sparkline. A fatigue watch (blink rate vs
+your own baseline, selections slowing) shows a "Take a break?" tile, lengthens the default
+dwell, and sends `gaze:fatigue` to the caregiver phone. Demo: `__gazeFatigue.force('mild')`.
+
 ## Credits
 All code was written during the event on 16 Oct 2026, with AI coding assistants
 (Claude by Anthropic). Libraries and APIs used: [Vite](https://vite.dev) (MIT),
