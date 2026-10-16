@@ -1,0 +1,284 @@
+// Groq API integration for contextual AAC reply prediction
+
+import { getOfflineReplies } from './categories.js';
+import { getCompactMemoryPrompt, rankRepliesByMemory } from './memory.js';
+
+const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+
+function getTimeOfDay() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  if (hour < 21) return 'evening';
+  return 'night';
+}
+
+export async function predictReplies({ utterance, history = [], profile, language = 'en-IN' }) {
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+  const model = import.meta.env.VITE_GROQ_MODEL || 'openai/gpt-oss-20b';
+
+  if (!apiKey || apiKey.trim() === '') {
+    console.warn('VITE_GROQ_API_KEY not configured. Using offline AAC reply fallback.');
+    return rankRepliesByMemory(getOfflineReplies(utterance, language));
+  }
+
+  const timeOfDay = getTimeOfDay();
+  const isHi = language.startsWith('hi');
+  const memorySnippet = getCompactMemoryPrompt();
+
+  const systemPrompt = `You are an AI assistant for a non-verbal patient using an eye-gaze communication device.
+${memorySnippet}
+Time of day: ${timeOfDay}
+Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
+
+Rules:
+1. Based on what was just heard, conversation history, and profile, output exactly 6 reply options for the patient.
+2. Every reply MUST be concise and strictly 8 words or fewer (<= 8 words).
+3. The 6 replies MUST match these 6 categories in order:
+   - "yes": Affirmation or agreement
+   - "no": Polite refusal or negation
+   - "need": Practical or physical care need
+   - "feeling": Emotional state or physical sensation
+   - "question": Counter-question back to the speaker
+   - "surprise": A contextual, warm, or personal remark
+4. Output JSON strictly adhering to this format:
+{
+  "replies": [
+    { "type": "yes", "tag": "Yes", "text": "..." },
+    { "type": "no", "tag": "No", "text": "..." },
+    { "type": "need", "tag": "Need", "text": "..." },
+    { "type": "feeling", "tag": "Feeling", "text": "..." },
+    { "type": "question", "tag": "Question", "text": "..." },
+    { "type": "surprise", "tag": "Note", "text": "..." }
+  ]
+}`;
+
+  // Format last ~6 turns
+  const recentHistory = history.slice(-6).map((turn) => ({
+    role: turn.speaker === 'patient' ? 'assistant' : 'user',
+    content: turn.text
+  }));
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...recentHistory,
+    { role: 'user', content: `Current heard speech: "${utterance || 'Hello, how are you?'}"` }
+  ];
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 s Groq timeout
+
+    const res = await fetch(GROQ_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.6,
+        reasoning_effort: 'low',
+        max_completion_tokens: 300,
+        response_format: { type: 'json_object' }
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.warn(`Groq API responded with status ${res.status}. Falling back to Gemini.`);
+      return await predictRepliesWithGemini({ utterance, history, profile, language });
+    }
+
+    const data = await res.json();
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+
+    if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
+      // Validate and clean each reply to <= 8 words
+      const cleaned = parsed.replies.slice(0, 6).map((r, i) => {
+        let text = (r.text || '').trim();
+        const words = text.split(/\s+/);
+        if (words.length > 8) text = words.slice(0, 8).join(' ');
+        return {
+          type: r.type || 'reply',
+          tag: r.tag || (['Yes', 'No', 'Need', 'Feeling', 'Question', 'Note'][i] || 'Reply'),
+          text
+        };
+      });
+      return rankRepliesByMemory(cleaned);
+    }
+
+    return await predictRepliesWithGemini({ utterance, history, profile, language });
+  } catch (err) {
+    console.warn('Groq prediction failed or exceeded 4s, falling back to Gemini:', err);
+    return await predictRepliesWithGemini({ utterance, history, profile, language });
+  }
+}
+
+async function predictRepliesWithGemini({ utterance, history = [], profile, language = 'en-IN' }) {
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const geminiModel = import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest';
+
+  if (!geminiKey || geminiKey.trim() === '') {
+    return getOfflineReplies(utterance, language);
+  }
+
+  const isHi = language.startsWith('hi');
+  const timeOfDay = getTimeOfDay();
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
+
+  const prompt = `You are an AI assistant for a non-verbal patient using an eye-gaze communication device.
+Patient: ${profile?.name || 'Aarav'} (${profile?.condition || 'Speech impaired'})
+Key People: ${profile?.familyNames || 'Family and Doctor'}
+Usual Needs: ${profile?.usualNeeds || 'Water, reposition, medicine'}
+Time of day: ${timeOfDay}
+Target Language: ${isHi ? 'Hindi (Devanagari script)' : 'Indian English'}
+Current heard speech: "${utterance || 'Hello, how are you?'}"
+Recent conversation context: ${history.slice(-4).map((t) => `${t.speaker}: ${t.text}`).join('; ')}
+
+Output a JSON object with a "replies" array of exactly 6 reply options for the patient, each strictly 8 words or fewer:
+1. "yes" (affirmation)
+2. "no" (polite refusal)
+3. "need" (physical or care need)
+4. "feeling" (emotion or state)
+5. "question" (counter-question)
+6. "surprise" (contextual remark)
+${isHi ? 'CRITICAL: Reply texts must be in Hindi Devanagari script.' : ''}
+
+JSON format:
+{
+  "replies": [
+    { "type": "yes", "tag": "Yes", "text": "..." },
+    { "type": "no", "tag": "No", "text": "..." },
+    { "type": "need", "tag": "Need", "text": "..." },
+    { "type": "feeling", "tag": "Feeling", "text": "..." },
+    { "type": "question", "tag": "Question", "text": "..." },
+    { "type": "surprise", "tag": "Note", "text": "..." }
+  ]
+}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': geminiKey.trim()
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.6,
+          maxOutputTokens: 300
+        }
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.warn(`Gemini fallback responded with ${res.status}. Using offline replies.`);
+      return getOfflineReplies(utterance, language);
+    }
+
+    const data = await res.json();
+    let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    rawText = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(rawText);
+
+    if (Array.isArray(parsed.replies) && parsed.replies.length > 0) {
+      const cleaned = parsed.replies.slice(0, 6).map((r, i) => {
+        let text = (r.text || '').trim();
+        const words = text.split(/\s+/);
+        if (words.length > 8) text = words.slice(0, 8).join(' ');
+        return {
+          type: r.type || 'reply',
+          tag: r.tag || (['Yes', 'No', 'Need', 'Feeling', 'Question', 'Note'][i] || 'Reply'),
+          text
+        };
+      });
+      return rankRepliesByMemory(cleaned);
+    }
+  } catch (err) {
+    console.warn('Gemini fallback failed:', err);
+  }
+
+  return getOfflineReplies(utterance, language);
+}
+
+export async function predictWordCompletions(prefix, context = '') {
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+  const model = import.meta.env.VITE_GROQ_MODEL || 'openai/gpt-oss-20b';
+
+  if (!apiKey || !prefix || prefix.length < 2) {
+    return getLocalWordCompletions(prefix);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const prompt = `Return a JSON object with a "words" array containing the 4 most likely next words starting with "${prefix}" in medical/assistive AAC context. JSON format: {"words": ["word1", "word2", "word3", "word4"]}`;
+    const res = await fetch(GROQ_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        reasoning_effort: 'low',
+        max_completion_tokens: 300,
+        response_format: { type: 'json_object' }
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return getLocalWordCompletions(prefix);
+    const data = await res.json();
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+    if (Array.isArray(parsed.words) && parsed.words.length > 0) {
+      return parsed.words.slice(0, 4).map((w) => w.toUpperCase());
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return getLocalWordCompletions(prefix);
+}
+
+const COMMON_WORDS = [
+  'WATER', 'WASHROOM', 'WAIT', 'WARM', 'WANT', 'WALK',
+  'PILLOW', 'PAIN', 'PLEASE', 'PHONE', 'POSITION', 'PULSE',
+  'DOCTOR', 'DRINK', 'DOOR', 'DUE', 'DIZZY',
+  'TIRED', 'THANK', 'THIRSTY', 'TABLE', 'TEMPERATURE',
+  'BLANKET', 'BATHROOM', 'BACK', 'BREATHE', 'BETTER',
+  'SUCTION', 'SLEEP', 'STOMACH', 'SHADOW', 'SMILE',
+  'COLD', 'CLEAN', 'CALL', 'COMFORT', 'CHEST',
+  'MEDICINE', 'MORNING', 'MOUTH', 'MOVE', 'MORE',
+  'NURSE', 'NECK', 'NIGHT', 'NO', 'NOW',
+  'HELP', 'HEAD', 'HOT', 'HUNGRY', 'HOLD',
+  'FAMILY', 'FEEL', 'FAN', 'FOOD', 'FEET'
+];
+
+function getLocalWordCompletions(prefix) {
+  const p = (prefix || '').toUpperCase();
+  const matches = COMMON_WORDS.filter((w) => w.startsWith(p)).slice(0, 4);
+  return matches;
+}
