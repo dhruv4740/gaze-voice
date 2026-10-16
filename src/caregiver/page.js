@@ -1,6 +1,6 @@
 // Caregiver phone page: shows what the patient says, requests, fatigue, and emergency alerts.
 const $ = (id) => document.getElementById(id);
-const relayUrl = new URLSearchParams(location.search).get('relay') || `ws://${location.hostname}:8787`;
+const relayUrl = new URLSearchParams(location.search).get('relay') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/relay`;
 let audio = null;
 // vibrate only after a tap: Chrome logs a blocked-call error otherwise
 const vibrate = (p) => { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(p); };

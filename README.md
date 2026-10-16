@@ -35,6 +35,17 @@ tap **Caregiver QR** (bottom-left) and scan it with a phone on the same Wi-Fi. T
 page shows what the patient says, request cards, fatigue notices, and a full-screen red
 alert with vibration and sound on emergency. Only short text events go through the relay.
 
+## Phone on any network
+1. `npm run phone`, then in a second terminal `npm run tunnel` (localhost.run over SSH port 22, no account; Windows OpenSSH). It prints `https://<random>.lhr.life`.
+2. Open that URL on the laptop, press **Caregiver QR**, scan it with the phone (any network; HTTPS also gives camera permission). The URL changes every run.
+3. Alternative: `npm run tunnel:cf` (Cloudflare, needs `tools\cloudflared.exe` and outbound port 7844, which some networks block).
+
+## Deploy (Railway or Render)
+One Node service: `npm start` (`server/relay.js`) serves `dist/` and the `/relay` websocket on `$PORT`. Build with `npm install && npm run build:deploy`.
+Render: connect the repo, it reads `render.yaml`. Railway: new project from the repo; build `npm run build:deploy`, start `npm start` (Nixpacks detects Node, no config file needed).
+Set these as **build-time** env vars in the dashboard (names only): `VITE_GROQ_API_KEY`, `VITE_GROQ_MODEL`, `VITE_GEMINI_API_KEY`, `VITE_GEMINI_MODEL`. Redeploy after changing them; they end up in the public JS bundle.
+MediaPipe models load from the CDN when `public/models` is absent (nothing to fetch on the host). Open `https://<app>/` on the laptop and `https://<app>/caregiver.html` on the phone, or use **Caregiver QR**.
+
 ## Credits
 All code was written during the event on 16 Oct 2026, with AI coding assistants
 (Claude by Anthropic). Libraries and APIs used: [Vite](https://vite.dev) (MIT),

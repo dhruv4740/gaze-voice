@@ -3,10 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "dev:host": "vite --host",
     "relay": "node server/relay.js",
+    "tunnel": "ssh -o StrictHostKeyChecking=accept-new -R 80:localhost:5173 nokey@localhost.run",
+    "tunnel:cf": "tools\\cloudflared.exe tunnel --url http://localhost:5173",
+    "start": "node server/relay.js",
+    "build:deploy": "vite build",
     "phone": "concurrently -k \"npm:relay\" \"npm:dev:host\"",
     "build": "vite build",
     "preview": "vite preview",
