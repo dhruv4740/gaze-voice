@@ -15,6 +15,13 @@ export function startGaze({ mode = 'mouse', root }) {
   root.appendChild(statusEl);
   const showStatus = (text, cls = '') => { statusEl.textContent = text; statusEl.className = cls; };
 
+  const params = new URLSearchParams(location.search);
+  const sw = document.createElement('select');
+  sw.id = 'gaze-mode';
+  for (const m of ['mouse', 'eyes', 'head']) sw.add(new Option(m, m, false, m === mode));
+  sw.onchange = () => { params.set('mode', sw.value); location.search = params.toString(); };
+  root.appendChild(sw);
+
   let point = { x: -1, y: -1 };
   let calibrating = false;
   const setPoint = (x, y) => { point = { x, y }; };
